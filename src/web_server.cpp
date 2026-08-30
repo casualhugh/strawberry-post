@@ -5,6 +5,7 @@
 
 #include "admin.h"
 #include "app_config.h"
+#include "diagnostics.h"
 #include "letters.h"
 #include "missed_connections.h"
 #include "notices.h"
@@ -19,6 +20,7 @@ void handleHome() {
 }
 
 void handleNotFound() {
+  recordHttpRequest(server);
   server.sendHeader("Location", AppConfig::kLocalUrl, true);
   server.send(302, "text/plain; charset=utf-8",
               "Strawberry Post is at http://post.local/\n");

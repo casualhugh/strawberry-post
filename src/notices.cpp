@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "diagnostics.h"
 #include "storage.h"
 #include "web_utils.h"
 
@@ -89,6 +90,7 @@ void sendError(WebServer& server, int status, const __FlashStringHelper* message
 }
 
 void handleList(WebServer& server) {
+  recordHttpRequest(server);
   removeExpired();
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "application/json; charset=utf-8", "");
@@ -127,6 +129,7 @@ void handleList(WebServer& server) {
 }
 
 void handleCreate(WebServer& server) {
+  recordHttpRequest(server);
   removeExpired();
   if (!formRequestWithinLimits(server)) {
     sendError(server, 413, F("Request is too large"));
@@ -250,7 +253,10 @@ bool startNotices() {
 
 void registerNoticeRoutes(WebServer& server) {
   server.on("/notices", HTTP_GET,
-            [&server]() { server.send_P(200, "text/html; charset=utf-8", kNoticePage); });
+            [&server]() {
+              recordHttpRequest(server);
+              server.send_P(200, "text/html; charset=utf-8", kNoticePage);
+            });
   server.on("/api/notices", HTTP_GET, [&server]() { handleList(server); });
   server.on("/api/notices", HTTP_POST, [&server]() { handleCreate(server); });
 }

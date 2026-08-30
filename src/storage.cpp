@@ -172,3 +172,11 @@ bool storageAvailable() {
 uint32_t persistedBootCount() {
   return bootCount;
 }
+
+size_t storageUsedBytes() {
+  return mounted ? LittleFS.usedBytes() : 0;
+}
+
+size_t storageTotalBytes() {
+  return mounted ? LittleFS.totalBytes() : 0;
+}

@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "dns_server.h"
+#include "diagnostics.h"
 #include "letters.h"
 #include "missed_connections.h"
 #include "notices.h"
@@ -32,5 +33,6 @@ void setup() {
 void loop() {
   handleDnsRequests();
   handleWebRequests();
+  handlePeriodicDiagnostics();
   delay(2);
 }

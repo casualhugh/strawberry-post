@@ -3,6 +3,7 @@
 #include <esp_system.h>
 #include <string.h>
 
+#include "diagnostics.h"
 #include "storage.h"
 #include "web_utils.h"
 
@@ -99,6 +100,7 @@ void sendError(WebServer& server, int status, const __FlashStringHelper* message
 }
 
 void handleCreate(WebServer& server) {
+  recordHttpRequest(server);
   if (!formRequestWithinLimits(server)) {
     sendError(server, 413, F("Request is too large"));
     return;
@@ -214,6 +216,7 @@ void handleCreate(WebServer& server) {
 }
 
 void handleStatus(WebServer& server) {
+  recordHttpRequest(server);
   String tracking = server.arg("tracking");
   tracking.trim();
   tracking.toUpperCase();
@@ -264,6 +267,7 @@ bool startLetters() {
 
 void registerLetterRoutes(WebServer& server) {
   server.on("/letters", HTTP_GET, [&server]() {
+    recordHttpRequest(server);
     server.send_P(200, "text/html; charset=utf-8", kLettersPage);
   });
   server.on("/api/letters", HTTP_POST, [&server]() { handleCreate(server); });

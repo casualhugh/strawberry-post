@@ -1,5 +1,6 @@
 #include "public_ui.h"
 
+#include "diagnostics.h"
 #include "letters.h"
 #include "missed_connections.h"
 #include "notices.h"
@@ -21,6 +22,7 @@ label{display:block;margin:1rem 0;font-weight:700}input,textarea{display:block;w
 )CSS";
 
 void sendStats(WebServer& server) {
+  recordHttpRequest(server);
   String response = F("{\"lettersSubmitted\":");
   response += totalLettersSubmitted();
   response += F(",\"lettersWaiting\":");
@@ -44,6 +46,7 @@ void sendStats(WebServer& server) {
 }  // namespace
 
 void sendPublicHome(WebServer& server) {
+  recordHttpRequest(server);
   const size_t outForDelivery =
       lettersWithStatus(LetterStatus::OutForDelivery);
   String page = F("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Strawberry Post</title><link rel=\"stylesheet\" href=\"/style.css\"></head><body><main><p class=\"eyebrow\">A tiny rural postal service</p><h1>Strawberry Post</h1><p>Letters, notices and hopeful messages, delivered locally with no internet required.</p><nav class=\"menu\"><a href=\"/letters\">Send a Letter</a><a href=\"/notices\">Notice Board</a><a href=\"/missed\">Missed Connections</a></nav><p class=\"status\">");
@@ -66,6 +69,7 @@ void sendPublicHome(WebServer& server) {
 
 void registerPublicUiRoutes(WebServer& server) {
   server.on("/style.css", HTTP_GET, [&server]() {
+    recordHttpRequest(server);
     server.sendHeader("Cache-Control", "public, max-age=3600");
     server.send_P(200, "text/css; charset=utf-8", kPublicStyles);
   });

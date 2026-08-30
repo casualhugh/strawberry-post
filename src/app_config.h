@@ -38,5 +38,7 @@ constexpr size_t kMaxLetters = 32;
 constexpr size_t kMaxFormBodyBytes = 4096;
 constexpr size_t kMaxFormArguments = 8;
 constexpr uint32_t kDuplicateWindowMs = 5000;
+constexpr uint32_t kDiagnosticsIntervalMs = 30000;
+constexpr bool kSerialRequestLogging = true;
 
 }  // namespace AppConfig

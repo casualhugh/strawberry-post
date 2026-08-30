@@ -25,6 +25,9 @@ struct LetterStore {
 
 LetterStore store{};
 bool loaded = false;
+uint32_t lastSubmissionHash = 0;
+uint32_t lastSubmissionAtMs = 0;
+char lastSubmissionTracking[AppConfig::kTrackingCodeMaxBytes + 1] = {};
 
 constexpr char kLettersPage[] PROGMEM = R"HTML(
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -43,6 +46,22 @@ bool persist() {
          writeStorageFileAtomic(kStorePath, &store, sizeof(store));
 }
 
+bool validStoreRecords() {
+  for (size_t index = 0; index < store.count; ++index) {
+    const LetterRecord& letter = store.records[index];
+    if (static_cast<uint8_t>(letter.status) >
+            static_cast<uint8_t>(LetterStatus::CouldNotFind) ||
+        !validStoredText(letter.trackingCode, sizeof(letter.trackingCode), false) ||
+        !validStoredText(letter.recipient, sizeof(letter.recipient), false) ||
+        !validStoredText(letter.location, sizeof(letter.location), false) ||
+        !validStoredText(letter.message, sizeof(letter.message)) ||
+        !validStoredText(letter.sender, sizeof(letter.sender), false)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool trackingExists(const char* code) {
   for (size_t index = 0; index < store.count; ++index) {
     if (strcmp(store.records[index].trackingCode, code) == 0) {
@@ -53,10 +72,18 @@ bool trackingExists(const char* code) {
 }
 
 bool generateTrackingCode(char* destination, size_t destinationSize) {
+  if (destination == nullptr || destinationSize < 11) {
+    return false;
+  }
   for (size_t attempt = 0; attempt < 10000; ++attempt) {
     const uint16_t number = store.nextTrackingNumber;
     store.nextTrackingNumber = (store.nextTrackingNumber + 1) % 10000;
-    snprintf(destination, destinationSize, "STRAW-%04u", number);
+    memcpy(destination, "STRAW-", 6);
+    destination[6] = '0' + (number / 1000) % 10;
+    destination[7] = '0' + (number / 100) % 10;
+    destination[8] = '0' + (number / 10) % 10;
+    destination[9] = '0' + number % 10;
+    destination[10] = '\0';
     if (!trackingExists(destination)) {
       return true;
     }
@@ -72,6 +99,10 @@ void sendError(WebServer& server, int status, const __FlashStringHelper* message
 }
 
 void handleCreate(WebServer& server) {
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
   if (!loaded || !storageAvailable()) {
     sendError(server, 503, F("Persistent storage is unavailable"));
     return;
@@ -88,6 +119,11 @@ void handleCreate(WebServer& server) {
     sendError(server, 400, F("Recipient, location and message are required"));
     return;
   }
+  if (!validUserText(recipient, false) || !validUserText(location, false) ||
+      !validUserText(message) || !validUserText(sender, false)) {
+    sendError(server, 400, F("Letter contains invalid text"));
+    return;
+  }
   if (recipient.length() > AppConfig::kLetterRecipientMaxBytes ||
       location.length() > AppConfig::kLetterLocationMaxBytes ||
       message.length() > AppConfig::kLetterMessageMaxBytes ||
@@ -95,9 +131,43 @@ void handleCreate(WebServer& server) {
     sendError(server, 413, F("Letter is too long"));
     return;
   }
-  if (store.count >= AppConfig::kMaxLetters) {
-    sendError(server, 503, F("The Postie bag is full"));
+  uint32_t submissionHash = appendSubmissionHash(0, recipient);
+  submissionHash = appendSubmissionHash(submissionHash, location);
+  submissionHash = appendSubmissionHash(submissionHash, message);
+  submissionHash = appendSubmissionHash(submissionHash, sender);
+  if (recentlySubmitted(submissionHash, lastSubmissionHash,
+                        lastSubmissionAtMs)) {
+    String response = F("{\"tracking\":\"");
+    response += lastSubmissionTracking;
+    response += F("\",\"status\":\"Waiting\",\"duplicate\":true}");
+    server.send(200, "application/json; charset=utf-8", response);
     return;
+  }
+
+  bool pruned = false;
+  size_t prunedIndex = 0;
+  LetterRecord prunedRecord{};
+  if (store.count >= AppConfig::kMaxLetters) {
+    bool foundCompleted = false;
+    for (size_t index = 0; index < store.count; ++index) {
+      const LetterStatus status = store.records[index].status;
+      if (status == LetterStatus::Delivered ||
+          status == LetterStatus::CouldNotFind) {
+        prunedIndex = index;
+        foundCompleted = true;
+        break;
+      }
+    }
+    if (!foundCompleted) {
+      sendError(server, 503, F("The Postie bag is full"));
+      return;
+    }
+    prunedRecord = store.records[prunedIndex];
+    for (size_t index = prunedIndex + 1; index < store.count; ++index) {
+      store.records[index - 1] = store.records[index];
+    }
+    --store.count;
+    pruned = true;
   }
 
   LetterRecord& letter = store.records[store.count];
@@ -121,9 +191,21 @@ void handleCreate(WebServer& server) {
     --store.count;
     --store.totalSubmitted;
     --store.nextId;
+    if (pruned) {
+      for (size_t index = store.count; index > prunedIndex; --index) {
+        store.records[index] = store.records[index - 1];
+      }
+      store.records[prunedIndex] = prunedRecord;
+      ++store.count;
+    }
     sendError(server, 507, F("Could not save letter"));
     return;
   }
+
+  lastSubmissionHash = submissionHash;
+  lastSubmissionAtMs = millis();
+  strlcpy(lastSubmissionTracking, letter.trackingCode,
+          sizeof(lastSubmissionTracking));
 
   String response = F("{\"tracking\":\"");
   response += letter.trackingCode;
@@ -136,6 +218,10 @@ void handleStatus(WebServer& server) {
   tracking.trim();
   tracking.toUpperCase();
   if (tracking.isEmpty() || tracking.length() > AppConfig::kTrackingCodeMaxBytes) {
+    sendError(server, 400, F("A valid tracking code is required"));
+    return;
+  }
+  if (!validUserText(tracking, false)) {
     sendError(server, 400, F("A valid tracking code is required"));
     return;
   }
@@ -161,7 +247,7 @@ bool startLetters() {
   const bool valid = readStorageFile(kStorePath, &store, sizeof(store)) &&
                      store.magic == kStoreMagic &&
                      store.version == kStoreVersion &&
-                     store.count <= AppConfig::kMaxLetters;
+                     store.count <= AppConfig::kMaxLetters && validStoreRecords();
   if (!valid) {
     store = {};
     store.magic = kStoreMagic;

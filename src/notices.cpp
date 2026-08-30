@@ -9,7 +9,7 @@ namespace {
 
 constexpr char kNoticesPath[] = "/notices.dat";
 constexpr uint32_t kNoticesMagic = 0x4e4f5443;  // "NOTC"
-constexpr uint16_t kNoticesVersion = 1;
+constexpr uint16_t kNoticesVersion = 2;
 
 struct NoticeStore {
   uint32_t magic;
@@ -22,6 +22,9 @@ struct NoticeStore {
 
 NoticeStore store{};
 bool loaded = false;
+uint32_t lastSubmissionHash = 0;
+uint32_t lastSubmissionAtMs = 0;
+uint32_t lastSubmissionId = 0;
 
 constexpr char kNoticePage[] PROGMEM = R"HTML(
 <!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -43,6 +46,18 @@ bool expired(const NoticeRecord& notice, uint32_t now) {
 bool persist() {
   return storageAvailable() &&
          writeStorageFileAtomic(kNoticesPath, &store, sizeof(store));
+}
+
+bool validStoreRecords() {
+  for (size_t index = 0; index < store.count; ++index) {
+    const NoticeRecord& notice = store.records[index];
+    if (notice.hidden > 1 ||
+        !validStoredText(notice.category, sizeof(notice.category), false) ||
+        !validStoredText(notice.message, sizeof(notice.message))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool removeExpired() {
@@ -75,8 +90,11 @@ void sendError(WebServer& server, int status, const __FlashStringHelper* message
 
 void handleList(WebServer& server) {
   removeExpired();
-  String response = F("{\"notices\":[");
-  response.reserve(256 + store.count * 128);
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json; charset=utf-8", "");
+  server.sendContent(F("{\"notices\":["));
+  String response;
+  response.reserve(AppConfig::kNoticeMessageMaxBytes + 160);
   bool first = true;
   const uint32_t now = millis();
   for (size_t index = 0; index < store.count; ++index) {
@@ -84,6 +102,7 @@ void handleList(WebServer& server) {
     if (notice.hidden) {
       continue;
     }
+    response = "";
     if (!first) {
       response += ',';
     }
@@ -99,15 +118,20 @@ void handleList(WebServer& server) {
     response += F(",\"expiresInSeconds\":");
     response += (notice.expiresAtMs - now) / 1000UL;
     response += '}';
+    server.sendContent(response);
   }
-  response += F("],\"totalSubmitted\":");
+  response = F("],\"totalSubmitted\":");
   response += store.totalSubmitted;
   response += '}';
-  server.send(200, "application/json; charset=utf-8", response);
+  server.sendContent(response);
 }
 
 void handleCreate(WebServer& server) {
   removeExpired();
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
   if (!loaded || !storageAvailable()) {
     sendError(server, 503, F("Persistent storage is unavailable"));
     return;
@@ -121,14 +145,35 @@ void handleCreate(WebServer& server) {
     sendError(server, 400, F("Category and message are required"));
     return;
   }
+  if (!validUserText(category, false) || !validUserText(message)) {
+    sendError(server, 400, F("Notice contains invalid text"));
+    return;
+  }
   if (category.length() > AppConfig::kNoticeCategoryMaxBytes ||
       message.length() > AppConfig::kNoticeMessageMaxBytes) {
     sendError(server, 413, F("Notice is too long"));
     return;
   }
-  if (store.count >= AppConfig::kMaxNotices) {
-    sendError(server, 503, F("Notice Board is full"));
+  uint32_t submissionHash = appendSubmissionHash(0, category);
+  submissionHash = appendSubmissionHash(submissionHash, message);
+  if (recentlySubmitted(submissionHash, lastSubmissionHash,
+                        lastSubmissionAtMs)) {
+    String response = F("{\"id\":");
+    response += lastSubmissionId;
+    response += F(",\"duplicate\":true}");
+    server.send(200, "application/json; charset=utf-8", response);
     return;
+  }
+
+  bool pruned = false;
+  NoticeRecord prunedRecord{};
+  if (store.count >= AppConfig::kMaxNotices) {
+    prunedRecord = store.records[0];
+    for (size_t index = 1; index < store.count; ++index) {
+      store.records[index - 1] = store.records[index];
+    }
+    --store.count;
+    pruned = true;
   }
 
   NoticeRecord& notice = store.records[store.count];
@@ -146,9 +191,20 @@ void handleCreate(WebServer& server) {
     --store.count;
     --store.totalSubmitted;
     --store.nextId;
+    if (pruned) {
+      for (size_t index = store.count; index > 0; --index) {
+        store.records[index] = store.records[index - 1];
+      }
+      store.records[0] = prunedRecord;
+      ++store.count;
+    }
     sendError(server, 507, F("Could not save notice"));
     return;
   }
+
+  lastSubmissionHash = submissionHash;
+  lastSubmissionAtMs = millis();
+  lastSubmissionId = notice.id;
 
   String response = F("{\"id\":");
   response += notice.id;
@@ -163,7 +219,7 @@ bool startNotices() {
   const bool valid = readStorageFile(kNoticesPath, &store, sizeof(store)) &&
                      store.magic == kNoticesMagic &&
                      store.version == kNoticesVersion &&
-                     store.count <= AppConfig::kMaxNotices;
+                     store.count <= AppConfig::kMaxNotices && validStoreRecords();
   if (!valid) {
     store = {};
     store.magic = kNoticesMagic;

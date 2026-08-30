@@ -27,6 +27,8 @@ void handleNotFound() {
 }  // namespace
 
 void startWebServer() {
+  static const char* kCollectedHeaders[] = {"Content-Length"};
+  server.collectHeaders(kCollectedHeaders, 1);
   server.on("/", HTTP_GET, handleHome);
   registerPublicUiRoutes(server);
   registerNoticeRoutes(server);

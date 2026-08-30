@@ -53,10 +53,15 @@ void handleOverview(WebServer& server) {
   if (!authenticate(server)) {
     return;
   }
-  String response = F("{\"letters\":[");
-  response.reserve(1024 + letterCount() * 256);
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json; charset=utf-8", "");
+  server.sendContent(F("{\"letters\":["));
+  String response;
+  response.reserve(1600);
   for (size_t index = 0; index < letterCount(); ++index) {
     const LetterRecord* letter = letterAt(index);
+    response = "";
     if (index > 0) response += ',';
     response += F("{\"id\":");
     response += letter->id;
@@ -73,10 +78,12 @@ void handleOverview(WebServer& server) {
     response += ',';
     appendJsonField(response, "status", letterStatusName(letter->status));
     response += '}';
+    server.sendContent(response);
   }
-  response += F("],\"notices\":[");
+  server.sendContent(F("],\"notices\":["));
   for (size_t index = 0; index < storedNoticeCount(); ++index) {
     const NoticeRecord* notice = noticeAt(index);
+    response = "";
     if (index > 0) response += ',';
     response += F("{\"id\":");
     response += notice->id;
@@ -86,10 +93,12 @@ void handleOverview(WebServer& server) {
     appendJsonField(response, "message", notice->message);
     response += F(",\"hidden\":");
     response += notice->hidden ? F("true}") : F("false}");
+    server.sendContent(response);
   }
-  response += F("],\"missed\":[");
+  server.sendContent(F("],\"missed\":["));
   for (size_t index = 0; index < storedMissedConnectionCount(); ++index) {
     const MissedConnectionRecord* record = missedConnectionAt(index);
+    response = "";
     if (index > 0) response += ',';
     response += F("{\"id\":");
     response += record->id;
@@ -99,9 +108,9 @@ void handleOverview(WebServer& server) {
     appendJsonField(response, "message", record->message);
     response += F(",\"hidden\":");
     response += record->hidden ? F("true}") : F("false}");
+    server.sendContent(response);
   }
-  response += F("]}");
-  server.send(200, "application/json; charset=utf-8", response);
+  server.sendContent(F("]}"));
 }
 
 bool parseStatus(const String& value, LetterStatus& status) {
@@ -115,6 +124,10 @@ bool parseStatus(const String& value, LetterStatus& status) {
 
 void handleLetterStatus(WebServer& server) {
   if (!authenticate(server)) return;
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
   LetterStatus status;
   const uint32_t id = server.arg("id").toInt();
   if (id == 0 || !parseStatus(server.arg("status"), status)) {
@@ -134,6 +147,10 @@ void handleLetterStatus(WebServer& server) {
 
 void handleNoticeModeration(WebServer& server) {
   if (!authenticate(server)) return;
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
   const uint32_t id = server.arg("id").toInt();
   const String action = server.arg("action");
   bool success = false;
@@ -153,6 +170,10 @@ void handleNoticeModeration(WebServer& server) {
 
 void handleMissedModeration(WebServer& server) {
   if (!authenticate(server)) return;
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
   const uint32_t id = server.arg("id").toInt();
   const String action = server.arg("action");
   bool success = false;

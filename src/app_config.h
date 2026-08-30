@@ -35,5 +35,8 @@ constexpr size_t kLetterMessageMaxBytes = 768;
 constexpr size_t kLetterSenderMaxBytes = 96;
 constexpr size_t kTrackingCodeMaxBytes = 10;
 constexpr size_t kMaxLetters = 32;
+constexpr size_t kMaxFormBodyBytes = 4096;
+constexpr size_t kMaxFormArguments = 8;
+constexpr uint32_t kDuplicateWindowMs = 5000;
 
 }  // namespace AppConfig

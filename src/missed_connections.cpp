@@ -9,7 +9,7 @@ namespace {
 
 constexpr char kStorePath[] = "/missed.dat";
 constexpr uint32_t kStoreMagic = 0x4d495353;  // "MISS"
-constexpr uint16_t kStoreVersion = 1;
+constexpr uint16_t kStoreVersion = 2;
 
 struct MissedStore {
   uint32_t magic;
@@ -22,6 +22,9 @@ struct MissedStore {
 
 MissedStore store{};
 bool loaded = false;
+uint32_t lastSubmissionHash = 0;
+uint32_t lastSubmissionAtMs = 0;
+uint32_t lastSubmissionId = 0;
 
 constexpr char kMissedPage[] PROGMEM = R"HTML(
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -41,6 +44,18 @@ bool expired(const MissedConnectionRecord& record, uint32_t now) {
 bool persist() {
   return storageAvailable() &&
          writeStorageFileAtomic(kStorePath, &store, sizeof(store));
+}
+
+bool validStoreRecords() {
+  for (size_t index = 0; index < store.count; ++index) {
+    const MissedConnectionRecord& record = store.records[index];
+    if (record.hidden > 1 ||
+        !validStoredText(record.title, sizeof(record.title), false) ||
+        !validStoredText(record.message, sizeof(record.message))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void removeExpired() {
@@ -72,8 +87,11 @@ void sendError(WebServer& server, int status, const __FlashStringHelper* message
 
 void handleList(WebServer& server) {
   removeExpired();
-  String response = F("{\"missed\":[");
-  response.reserve(256 + store.count * 128);
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json; charset=utf-8", "");
+  server.sendContent(F("{\"missed\":["));
+  String response;
+  response.reserve(AppConfig::kMissedMessageMaxBytes + 200);
   bool first = true;
   const uint32_t now = millis();
   for (size_t index = 0; index < store.count; ++index) {
@@ -81,6 +99,7 @@ void handleList(WebServer& server) {
     if (record.hidden) {
       continue;
     }
+    response = "";
     if (!first) {
       response += ',';
     }
@@ -96,15 +115,20 @@ void handleList(WebServer& server) {
     response += F(",\"expiresInSeconds\":");
     response += (record.expiresAtMs - now) / 1000UL;
     response += '}';
+    server.sendContent(response);
   }
-  response += F("],\"totalSubmitted\":");
+  response = F("],\"totalSubmitted\":");
   response += store.totalSubmitted;
   response += '}';
-  server.send(200, "application/json; charset=utf-8", response);
+  server.sendContent(response);
 }
 
 void handleCreate(WebServer& server) {
   removeExpired();
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
   if (!loaded || !storageAvailable()) {
     sendError(server, 503, F("Persistent storage is unavailable"));
     return;
@@ -118,14 +142,35 @@ void handleCreate(WebServer& server) {
     sendError(server, 400, F("Title and message are required"));
     return;
   }
+  if (!validUserText(title, false) || !validUserText(message)) {
+    sendError(server, 400, F("Missed connection contains invalid text"));
+    return;
+  }
   if (title.length() > AppConfig::kMissedTitleMaxBytes ||
       message.length() > AppConfig::kMissedMessageMaxBytes) {
     sendError(server, 413, F("Missed connection is too long"));
     return;
   }
-  if (store.count >= AppConfig::kMaxMissedConnections) {
-    sendError(server, 503, F("Missed Connections board is full"));
+  uint32_t submissionHash = appendSubmissionHash(0, title);
+  submissionHash = appendSubmissionHash(submissionHash, message);
+  if (recentlySubmitted(submissionHash, lastSubmissionHash,
+                        lastSubmissionAtMs)) {
+    String response = F("{\"id\":");
+    response += lastSubmissionId;
+    response += F(",\"duplicate\":true}");
+    server.send(200, "application/json; charset=utf-8", response);
     return;
+  }
+
+  bool pruned = false;
+  MissedConnectionRecord prunedRecord{};
+  if (store.count >= AppConfig::kMaxMissedConnections) {
+    prunedRecord = store.records[0];
+    for (size_t index = 1; index < store.count; ++index) {
+      store.records[index - 1] = store.records[index];
+    }
+    --store.count;
+    pruned = true;
   }
 
   MissedConnectionRecord& record = store.records[store.count];
@@ -143,9 +188,20 @@ void handleCreate(WebServer& server) {
     --store.count;
     --store.totalSubmitted;
     --store.nextId;
+    if (pruned) {
+      for (size_t index = store.count; index > 0; --index) {
+        store.records[index] = store.records[index - 1];
+      }
+      store.records[0] = prunedRecord;
+      ++store.count;
+    }
     sendError(server, 507, F("Could not save missed connection"));
     return;
   }
+
+  lastSubmissionHash = submissionHash;
+  lastSubmissionAtMs = millis();
+  lastSubmissionId = record.id;
 
   String response = F("{\"id\":");
   response += record.id;
@@ -160,7 +216,8 @@ bool startMissedConnections() {
   const bool valid = readStorageFile(kStorePath, &store, sizeof(store)) &&
                      store.magic == kStoreMagic &&
                      store.version == kStoreVersion &&
-                     store.count <= AppConfig::kMaxMissedConnections;
+                     store.count <= AppConfig::kMaxMissedConnections &&
+                     validStoreRecords();
   if (!valid) {
     store = {};
     store.magic = kStoreMagic;

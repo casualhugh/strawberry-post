@@ -10,7 +10,7 @@ struct MissedConnectionRecord {
   uint32_t createdAtMs;
   uint32_t expiresAtMs;
   uint32_t bootId;
-  bool hidden;
+  uint8_t hidden;
   char title[AppConfig::kMissedTitleMaxBytes + 1];
   char message[AppConfig::kMissedMessageMaxBytes + 1];
 };

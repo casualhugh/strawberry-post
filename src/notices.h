@@ -10,7 +10,7 @@ struct NoticeRecord {
   uint32_t createdAtMs;
   uint32_t expiresAtMs;
   uint32_t bootId;
-  bool hidden;
+  uint8_t hidden;
   char category[AppConfig::kNoticeCategoryMaxBytes + 1];
   char message[AppConfig::kNoticeMessageMaxBytes + 1];
 };

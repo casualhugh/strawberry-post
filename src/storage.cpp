@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <LittleFS.h>
+#include <esp_partition.h>
 
 namespace {
 
@@ -19,6 +20,24 @@ struct PersistentState {
 bool mounted = false;
 uint32_t bootCount = 0;
 
+bool filesystemPartitionLooksBlank() {
+  const esp_partition_t* partition = esp_partition_find_first(
+      ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+  if (partition == nullptr) {
+    return false;
+  }
+  uint8_t sample[64];
+  if (esp_partition_read(partition, 0, sample, sizeof(sample)) != ESP_OK) {
+    return false;
+  }
+  for (uint8_t value : sample) {
+    if (value != 0xff) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool makeSiblingPath(const char* path, const char* suffix, char* destination,
                      size_t destinationSize) {
   const int written =
@@ -31,7 +50,11 @@ bool mountFilesystem() {
     return true;
   }
 
-  Serial.println("LittleFS mount failed; attempting first-use format.");
+  if (!filesystemPartitionLooksBlank()) {
+    Serial.println("LittleFS mount failed on non-blank storage; refusing to format.");
+    return false;
+  }
+  Serial.println("Blank LittleFS partition detected; formatting for first use.");
   if (!LittleFS.format()) {
     Serial.println("LittleFS format failed.");
     return false;
@@ -51,18 +74,21 @@ bool readStorageFile(const char* path, void* destination, size_t size) {
     return false;
   }
 
-  const char* readablePath = LittleFS.exists(path) ? path : backupPath;
-  File file = LittleFS.open(readablePath, FILE_READ);
-  if (!file || file.size() != size) {
-    if (file) {
-      file.close();
+  auto readPath = [destination, size](const char* readablePath) {
+    File file = LittleFS.open(readablePath, FILE_READ);
+    if (!file || file.size() != size) {
+      if (file) {
+        file.close();
+      }
+      return false;
     }
-    return false;
-  }
+    const size_t bytesRead =
+        file.read(static_cast<uint8_t*>(destination), size);
+    file.close();
+    return bytesRead == size;
+  };
 
-  const size_t bytesRead = file.read(static_cast<uint8_t*>(destination), size);
-  file.close();
-  return bytesRead == size;
+  return readPath(path) || readPath(backupPath);
 }
 
 bool writeStorageFileAtomic(const char* path, const void* data, size_t size) {
@@ -94,8 +120,8 @@ bool writeStorageFileAtomic(const char* path, const void* data, size_t size) {
 
   LittleFS.remove(backupPath);
   if (LittleFS.exists(path) && !LittleFS.rename(path, backupPath)) {
-      LittleFS.remove(temporaryPath);
-      return false;
+    LittleFS.remove(temporaryPath);
+    return false;
   }
   if (!LittleFS.rename(temporaryPath, path)) {
     LittleFS.remove(temporaryPath);
@@ -128,6 +154,7 @@ bool startStorage() {
   bootCount = state.bootCount;
   if (!writeStorageFileAtomic(kStatePath, &state, sizeof(state))) {
     Serial.println("Failed to persist system state.");
+    mounted = false;
     return false;
   }
 

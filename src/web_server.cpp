@@ -9,6 +9,10 @@ namespace {
 
 WebServer server(AppConfig::kHttpPort);
 
+// Keep the public page in program flash so the basic site is part of the
+// firmware image and remains available even if the data filesystem fails.
+// If this grows, retain HTML/CSS as separate source assets and embed them into
+// PROGMEM at build time instead of making LittleFS a runtime dependency.
 constexpr char kHomePage[] PROGMEM = R"HTML(
 <!doctype html>
 <html lang="en">

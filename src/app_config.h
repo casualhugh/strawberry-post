@@ -5,6 +5,7 @@
 namespace AppConfig {
 
 constexpr char kApSsid[] = "STRAWBERRY POST no internet";
+constexpr char kLocalUrl[] = "http://post.local/";
 constexpr uint8_t kApChannel = 1;
 // Initial association limit only; it does not control radio range. Revisit this
 // after real multi-phone load testing rather than treating eight as a target.
@@ -15,5 +16,6 @@ const IPAddress kGateway(192, 168, 4, 1);
 const IPAddress kSubnet(255, 255, 255, 0);
 
 constexpr uint16_t kHttpPort = 80;
+constexpr uint16_t kDnsPort = 53;
 
 }  // namespace AppConfig

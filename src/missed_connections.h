@@ -19,3 +19,7 @@ bool startMissedConnections();
 void registerMissedConnectionRoutes(WebServer& server);
 size_t activeMissedConnectionCount();
 uint32_t totalMissedConnectionsSubmitted();
+size_t storedMissedConnectionCount();
+const MissedConnectionRecord* missedConnectionAt(size_t index);
+bool setMissedConnectionHidden(uint32_t id, bool hidden);
+bool deleteMissedConnection(uint32_t id);

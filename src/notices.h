@@ -19,3 +19,7 @@ bool startNotices();
 void registerNoticeRoutes(WebServer& server);
 size_t activeNoticeCount();
 uint32_t totalNoticesSubmitted();
+size_t storedNoticeCount();
+const NoticeRecord* noticeAt(size_t index);
+bool setNoticeHidden(uint32_t id, bool hidden);
+bool deleteNotice(uint32_t id);

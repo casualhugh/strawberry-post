@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 
+#include "admin.h"
 #include "app_config.h"
 #include "letters.h"
 #include "missed_connections.h"
@@ -52,6 +53,7 @@ void startWebServer() {
   registerNoticeRoutes(server);
   registerMissedConnectionRoutes(server);
   registerLetterRoutes(server);
+  registerAdminRoutes(server);
 
   // Return unexpected content for common operating-system connectivity checks.
   // This may prompt a captive-network window, but users can always browse to

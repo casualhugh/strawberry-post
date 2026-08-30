@@ -218,3 +218,50 @@ size_t activeNoticeCount() {
 uint32_t totalNoticesSubmitted() {
   return store.totalSubmitted;
 }
+
+size_t storedNoticeCount() {
+  removeExpired();
+  return store.count;
+}
+
+const NoticeRecord* noticeAt(size_t index) {
+  removeExpired();
+  return index < store.count ? &store.records[index] : nullptr;
+}
+
+bool setNoticeHidden(uint32_t id, bool hidden) {
+  for (size_t index = 0; index < store.count; ++index) {
+    if (store.records[index].id == id) {
+      const bool previous = store.records[index].hidden;
+      store.records[index].hidden = hidden;
+      if (persist()) {
+        return true;
+      }
+      store.records[index].hidden = previous;
+      return false;
+    }
+  }
+  return false;
+}
+
+bool deleteNotice(uint32_t id) {
+  for (size_t index = 0; index < store.count; ++index) {
+    if (store.records[index].id == id) {
+      const NoticeRecord removed = store.records[index];
+      for (size_t next = index + 1; next < store.count; ++next) {
+        store.records[next - 1] = store.records[next];
+      }
+      --store.count;
+      if (persist()) {
+        return true;
+      }
+      for (size_t previous = store.count; previous > index; --previous) {
+        store.records[previous] = store.records[previous - 1];
+      }
+      store.records[index] = removed;
+      ++store.count;
+      return false;
+    }
+  }
+  return false;
+}

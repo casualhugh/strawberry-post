@@ -6,6 +6,10 @@ namespace AppConfig {
 
 constexpr char kApSsid[] = "STRAWBERRY POST no internet";
 constexpr char kLocalUrl[] = "http://post.local/";
+constexpr char kAdminUsername[] = "postie";
+// Change this in one place before deployment. Basic auth is appropriate only
+// for this trusted, offline festival network and is not encrypted over HTTP.
+constexpr char kAdminPassword[] = "change-me-postie";
 constexpr uint8_t kApChannel = 1;
 // Initial association limit only; it does not control radio range. Revisit this
 // after real multi-phone load testing rather than treating eight as a target.

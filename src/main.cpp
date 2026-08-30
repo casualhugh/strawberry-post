@@ -1,18 +1,24 @@
 #include <Arduino.h>
 
-// put function declarations here:
-int myFunction(int, int);
+#include "web_server.h"
+#include "wifi_manager.h"
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+  Serial.begin(115200);
+  delay(250);
+  Serial.println();
+  Serial.println("Starting Strawberry Post...");
+
+  if (!startAccessPoint()) {
+    Serial.println("Access point startup failed; HTTP server not started.");
+    return;
+  }
+
+  startWebServer();
+  Serial.println("Strawberry Post is ready.");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
-
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+  handleWebRequests();
+  delay(2);
 }

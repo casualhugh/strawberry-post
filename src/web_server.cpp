@@ -4,6 +4,7 @@
 #include <WebServer.h>
 
 #include "app_config.h"
+#include "notices.h"
 
 namespace {
 
@@ -27,7 +28,7 @@ constexpr char kHomePage[] PROGMEM = R"HTML(
     p{font-size:1.15rem;line-height:1.5}
   </style>
 </head>
-<body><main><h1>Strawberry Post</h1><p>Strawberry Post is running.</p></main></body>
+<body><main><h1>Strawberry Post</h1><p>Strawberry Post is running.</p><p><a href="/notices">Open the Notice Board</a></p></main></body>
 </html>
 )HTML";
 
@@ -46,6 +47,7 @@ void handleNotFound() {
 
 void startWebServer() {
   server.on("/", HTTP_GET, handleHome);
+  registerNoticeRoutes(server);
 
   // Return unexpected content for common operating-system connectivity checks.
   // This may prompt a captive-network window, but users can always browse to

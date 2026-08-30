@@ -18,4 +18,9 @@ const IPAddress kSubnet(255, 255, 255, 0);
 constexpr uint16_t kHttpPort = 80;
 constexpr uint16_t kDnsPort = 53;
 
+constexpr uint32_t kPublicPostLifetimeMs = 8UL * 60UL * 60UL * 1000UL;
+constexpr size_t kNoticeCategoryMaxBytes = 32;
+constexpr size_t kNoticeMessageMaxBytes = 512;
+constexpr size_t kMaxNotices = 32;
+
 }  // namespace AppConfig

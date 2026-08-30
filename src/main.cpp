@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "dns_server.h"
+#include "notices.h"
 #include "storage.h"
 #include "web_server.h"
 #include "wifi_manager.h"
@@ -18,6 +19,7 @@ void setup() {
 
   // HTTP remains usable at the AP address if DNS cannot be started.
   startStorage();
+  startNotices();
   startDnsServer();
   startWebServer();
   Serial.println("Strawberry Post is ready.");

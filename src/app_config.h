@@ -22,5 +22,8 @@ constexpr uint32_t kPublicPostLifetimeMs = 8UL * 60UL * 60UL * 1000UL;
 constexpr size_t kNoticeCategoryMaxBytes = 32;
 constexpr size_t kNoticeMessageMaxBytes = 512;
 constexpr size_t kMaxNotices = 32;
+constexpr size_t kMissedTitleMaxBytes = 96;
+constexpr size_t kMissedMessageMaxBytes = 512;
+constexpr size_t kMaxMissedConnections = 32;
 
 }  // namespace AppConfig

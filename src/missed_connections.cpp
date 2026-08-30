@@ -1,0 +1,217 @@
+#include "missed_connections.h"
+
+#include <string.h>
+
+#include "storage.h"
+#include "web_utils.h"
+
+namespace {
+
+constexpr char kStorePath[] = "/missed.dat";
+constexpr uint32_t kStoreMagic = 0x4d495353;  // "MISS"
+constexpr uint16_t kStoreVersion = 1;
+
+struct MissedStore {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t count;
+  uint32_t nextId;
+  uint32_t totalSubmitted;
+  MissedConnectionRecord records[AppConfig::kMaxMissedConnections];
+};
+
+MissedStore store{};
+bool loaded = false;
+
+constexpr char kMissedPage[] PROGMEM = R"HTML(
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Missed Connections | Strawberry Post</title><style>
+body{margin:0;background:#fff8e7;color:#54261f;font:17px system-ui,sans-serif}main{max-width:38rem;margin:auto;padding:1rem}h1{color:#af2631}
+label{display:block;margin:.8rem 0}input,textarea,button{box-sizing:border-box;width:100%;padding:.8rem;font:inherit}textarea{min-height:8rem}
+button{background:#af2631;color:#fff;border:0;border-radius:.4rem;font-weight:700}.post{background:#fff;padding:1rem;margin:1rem 0;border-left:5px solid #c94b50}
+</style></head><body><main><p><a href="/">&larr; Strawberry Post</a></p><h1>Missed Connections</h1>
+<form id="form"><label>To / title<input name="title" maxlength="80" required></label><label>Message<textarea name="message" maxlength="280" required></textarea></label>
+<button>Post connection</button></form><p id="result" role="status"></p><section id="posts"></section><script>
+const form=document.querySelector('#form'),result=document.querySelector('#result'),posts=document.querySelector('#posts');
+async function load(){const r=await fetch('/api/missed');const data=await r.json();posts.replaceChildren(...data.missed.map(n=>{const article=document.createElement('article');article.className='post';const strong=document.createElement('strong');strong.textContent=n.title;const p=document.createElement('p');p.textContent=n.message;article.append(strong,p);return article}))}
+form.addEventListener('submit',async e=>{e.preventDefault();result.textContent='Posting...';const r=await fetch('/api/missed',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form))});const data=await r.json();result.textContent=data.error||'Connection posted.';if(r.ok){form.reset();load()}});load();
+</script></main></body></html>
+)HTML";
+
+bool expired(const MissedConnectionRecord& record, uint32_t now) {
+  return static_cast<int32_t>(now - record.expiresAtMs) >= 0;
+}
+
+bool persist() {
+  return storageAvailable() &&
+         writeStorageFileAtomic(kStorePath, &store, sizeof(store));
+}
+
+void removeExpired() {
+  const uint32_t now = millis();
+  size_t destination = 0;
+  bool changed = false;
+  for (size_t index = 0; index < store.count; ++index) {
+    if (expired(store.records[index], now)) {
+      changed = true;
+      continue;
+    }
+    if (destination != index) {
+      store.records[destination] = store.records[index];
+    }
+    ++destination;
+  }
+  store.count = destination;
+  if (changed) {
+    persist();
+  }
+}
+
+void sendError(WebServer& server, int status, const __FlashStringHelper* message) {
+  String body = F("{\"error\":\"");
+  body += message;
+  body += F("\"}");
+  server.send(status, "application/json; charset=utf-8", body);
+}
+
+void handleList(WebServer& server) {
+  removeExpired();
+  String response = F("{\"missed\":[");
+  response.reserve(256 + store.count * 128);
+  bool first = true;
+  const uint32_t now = millis();
+  for (size_t index = 0; index < store.count; ++index) {
+    const MissedConnectionRecord& record = store.records[index];
+    if (record.hidden) {
+      continue;
+    }
+    if (!first) {
+      response += ',';
+    }
+    first = false;
+    response += F("{\"id\":");
+    response += record.id;
+    response += F(",\"title\":\"");
+    response += escapeJson(record.title);
+    response += F("\",\"message\":\"");
+    response += escapeJson(record.message);
+    response += F("\",\"createdUptimeSeconds\":");
+    response += record.createdAtMs / 1000UL;
+    response += F(",\"expiresInSeconds\":");
+    response += (record.expiresAtMs - now) / 1000UL;
+    response += '}';
+  }
+  response += F("],\"totalSubmitted\":");
+  response += store.totalSubmitted;
+  response += '}';
+  server.send(200, "application/json; charset=utf-8", response);
+}
+
+void handleCreate(WebServer& server) {
+  removeExpired();
+  if (!loaded || !storageAvailable()) {
+    sendError(server, 503, F("Persistent storage is unavailable"));
+    return;
+  }
+
+  String title = server.arg("title");
+  String message = server.arg("message");
+  title.trim();
+  message.trim();
+  if (title.isEmpty() || message.isEmpty()) {
+    sendError(server, 400, F("Title and message are required"));
+    return;
+  }
+  if (title.length() > AppConfig::kMissedTitleMaxBytes ||
+      message.length() > AppConfig::kMissedMessageMaxBytes) {
+    sendError(server, 413, F("Missed connection is too long"));
+    return;
+  }
+  if (store.count >= AppConfig::kMaxMissedConnections) {
+    sendError(server, 503, F("Missed Connections board is full"));
+    return;
+  }
+
+  MissedConnectionRecord& record = store.records[store.count];
+  memset(&record, 0, sizeof(record));
+  record.id = store.nextId++;
+  record.createdAtMs = millis();
+  record.expiresAtMs = record.createdAtMs + AppConfig::kPublicPostLifetimeMs;
+  record.bootId = persistedBootCount();
+  strlcpy(record.title, title.c_str(), sizeof(record.title));
+  strlcpy(record.message, message.c_str(), sizeof(record.message));
+  ++store.count;
+  ++store.totalSubmitted;
+
+  if (!persist()) {
+    --store.count;
+    --store.totalSubmitted;
+    --store.nextId;
+    sendError(server, 507, F("Could not save missed connection"));
+    return;
+  }
+
+  String response = F("{\"id\":");
+  response += record.id;
+  response += '}';
+  server.send(201, "application/json; charset=utf-8", response);
+}
+
+}  // namespace
+
+bool startMissedConnections() {
+  store = {};
+  store.magic = kStoreMagic;
+  store.version = kStoreVersion;
+  store.nextId = 1;
+
+  MissedStore saved{};
+  if (readStorageFile(kStorePath, &saved, sizeof(saved)) &&
+      saved.magic == kStoreMagic && saved.version == kStoreVersion &&
+      saved.count <= AppConfig::kMaxMissedConnections) {
+    store = saved;
+  }
+
+  const uint32_t now = millis();
+  bool changed = false;
+  for (size_t index = 0; index < store.count; ++index) {
+    MissedConnectionRecord& record = store.records[index];
+    if (record.bootId != persistedBootCount()) {
+      record.bootId = persistedBootCount();
+      record.createdAtMs = now;
+      record.expiresAtMs = now + AppConfig::kPublicPostLifetimeMs;
+      changed = true;
+    }
+  }
+  loaded = storageAvailable();
+  if (changed && !persist()) {
+    Serial.println("Failed to refresh missed-connection expiry after reboot.");
+  }
+  Serial.printf("Missed Connections ready: %u active, %lu submitted.\n",
+                static_cast<unsigned>(store.count),
+                static_cast<unsigned long>(store.totalSubmitted));
+  return loaded;
+}
+
+void registerMissedConnectionRoutes(WebServer& server) {
+  server.on("/missed", HTTP_GET, [&server]() {
+    server.send_P(200, "text/html; charset=utf-8", kMissedPage);
+  });
+  server.on("/api/missed", HTTP_GET, [&server]() { handleList(server); });
+  server.on("/api/missed", HTTP_POST, [&server]() { handleCreate(server); });
+}
+
+size_t activeMissedConnectionCount() {
+  removeExpired();
+  size_t count = 0;
+  for (size_t index = 0; index < store.count; ++index) {
+    if (!store.records[index].hidden) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+uint32_t totalMissedConnectionsSubmitted() {
+  return store.totalSubmitted;
+}

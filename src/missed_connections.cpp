@@ -4,12 +4,13 @@
 
 #include "diagnostics.h"
 #include "storage.h"
+#include "storage_format.h"
 #include "web_utils.h"
 
 namespace {
 
 constexpr char kStorePath[] = "/missed.dat";
-constexpr uint32_t kStoreMagic = 0x4d495353;  // "MISS"
+constexpr uint32_t kStoreMagic = makeStorageMagic('M', 'I', 'S', 'S');
 constexpr uint16_t kStoreVersion = 2;
 
 struct MissedStore {

@@ -4,12 +4,13 @@
 
 #include "diagnostics.h"
 #include "storage.h"
+#include "storage_format.h"
 #include "web_utils.h"
 
 namespace {
 
 constexpr char kNoticesPath[] = "/notices.dat";
-constexpr uint32_t kNoticesMagic = 0x4e4f5443;  // "NOTC"
+constexpr uint32_t kNoticesMagic = makeStorageMagic('N', 'O', 'T', 'C');
 constexpr uint16_t kNoticesVersion = 2;
 
 struct NoticeStore {
@@ -61,7 +62,7 @@ bool validStoreRecords() {
   return true;
 }
 
-bool removeExpired() {
+void removeExpired() {
   const uint32_t now = millis();
   size_t destination = 0;
   bool changed = false;
@@ -79,7 +80,6 @@ bool removeExpired() {
   if (changed) {
     persist();
   }
-  return changed;
 }
 
 void sendError(WebServer& server, int status, const __FlashStringHelper* message) {

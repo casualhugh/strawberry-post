@@ -40,5 +40,9 @@ constexpr size_t kMaxFormArguments = 8;
 constexpr uint32_t kDuplicateWindowMs = 5000;
 constexpr uint32_t kDiagnosticsIntervalMs = 30000;
 constexpr bool kSerialRequestLogging = true;
+// Briefly allow the serial device to enumerate before startup messages, then
+// yield in the main loop so Wi-Fi/RTOS background work is not starved.
+constexpr uint32_t kSerialStartupSettleMs = 250;
+constexpr uint32_t kMainLoopYieldMs = 2;
 
 }  // namespace AppConfig

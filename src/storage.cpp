@@ -4,16 +4,24 @@
 #include <LittleFS.h>
 #include <esp_partition.h>
 
+#include "storage_format.h"
+
 namespace {
 
 constexpr char kStatePath[] = "/system.dat";
-constexpr uint32_t kStateMagic = 0x53545053;  // "STPS"
+constexpr uint32_t kStateMagic = makeStorageMagic('S', 'T', 'P', 'S');
 constexpr uint16_t kStateVersion = 1;
+constexpr size_t kStoragePathBufferSize = 48;
+// An erased flash partition reads as 0xff. Sampling its beginning
+// is only a conservative first-use check; non-blank mount failures are never
+// auto-formatted because they may contain recoverable data.
+constexpr uint8_t kErasedFlashByte = 0xff;
+constexpr size_t kBlankPartitionProbeBytes = 64;
 
 struct PersistentState {
   uint32_t magic;
   uint16_t version;
-  uint16_t reserved;
+  uint16_t reserved;  // Reserved schema space; always zero in version 1.
   uint32_t bootCount;
 };
 
@@ -26,12 +34,12 @@ bool filesystemPartitionLooksBlank() {
   if (partition == nullptr) {
     return false;
   }
-  uint8_t sample[64];
+  uint8_t sample[kBlankPartitionProbeBytes];
   if (esp_partition_read(partition, 0, sample, sizeof(sample)) != ESP_OK) {
     return false;
   }
   for (uint8_t value : sample) {
-    if (value != 0xff) {
+    if (value != kErasedFlashByte) {
       return false;
     }
   }
@@ -69,7 +77,7 @@ bool readStorageFile(const char* path, void* destination, size_t size) {
     return false;
   }
 
-  char backupPath[48];
+  char backupPath[kStoragePathBufferSize];
   if (!makeSiblingPath(path, ".bak", backupPath, sizeof(backupPath))) {
     return false;
   }
@@ -96,8 +104,8 @@ bool writeStorageFileAtomic(const char* path, const void* data, size_t size) {
     return false;
   }
 
-  char temporaryPath[48];
-  char backupPath[48];
+  char temporaryPath[kStoragePathBufferSize];
+  char backupPath[kStoragePathBufferSize];
   if (!makeSiblingPath(path, ".tmp", temporaryPath, sizeof(temporaryPath)) ||
       !makeSiblingPath(path, ".bak", backupPath, sizeof(backupPath))) {
     return false;

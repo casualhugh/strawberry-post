@@ -44,33 +44,8 @@ String escapeJson(const String& value) {
   return escaped;
 }
 
-String escapeHtml(const String& value) {
-  String escaped;
-  escaped.reserve(value.length() + 16);
-  for (size_t index = 0; index < value.length(); ++index) {
-    switch (value[index]) {
-      case '&':
-        escaped += F("&amp;");
-        break;
-      case '<':
-        escaped += F("&lt;");
-        break;
-      case '>':
-        escaped += F("&gt;");
-        break;
-      case '"':
-        escaped += F("&quot;");
-        break;
-      case '\'':
-        escaped += F("&#39;");
-        break;
-      default:
-        escaped += value[index];
-    }
-  }
-  return escaped;
-}
-
+// Validate Unicode scalar values rather than treating UTF-8 bytes as ASCII.
+// The byte boundaries below come directly from the UTF-8 encoding rules.
 bool validUserText(const String& value, bool allowNewlines) {
   const uint8_t* bytes = reinterpret_cast<const uint8_t*>(value.c_str());
   size_t index = 0;
@@ -148,15 +123,18 @@ bool formRequestWithinLimits(WebServer& server) {
 }
 
 uint32_t appendSubmissionHash(uint32_t hash, const String& value) {
+  constexpr uint32_t kFnv1aOffsetBasis = 2166136261UL;
+  constexpr uint32_t kFnv1aPrime = 16777619UL;
+  constexpr uint8_t kFieldSeparator = 0xff;
   if (hash == 0) {
-    hash = 2166136261UL;
+    hash = kFnv1aOffsetBasis;
   }
   for (size_t index = 0; index < value.length(); ++index) {
     hash ^= static_cast<uint8_t>(value[index]);
-    hash *= 16777619UL;
+    hash *= kFnv1aPrime;
   }
-  hash ^= 0xff;
-  hash *= 16777619UL;
+  hash ^= kFieldSeparator;
+  hash *= kFnv1aPrime;
   return hash;
 }
 

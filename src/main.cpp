@@ -11,7 +11,7 @@
 
 void setup() {
   Serial.begin(115200);
-  delay(250);
+  delay(AppConfig::kSerialStartupSettleMs);
   Serial.println();
   Serial.println("Starting Strawberry Post...");
 
@@ -34,5 +34,5 @@ void loop() {
   handleDnsRequests();
   handleWebRequests();
   handlePeriodicDiagnostics();
-  delay(2);
+  delay(AppConfig::kMainLoopYieldMs);
 }

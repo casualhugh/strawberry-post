@@ -16,6 +16,8 @@ enum class LetterStatus : uint8_t {
 struct LetterRecord {
   uint32_t id;
   uint32_t createdAtMs;
+  // Identifies which uptime epoch createdAtMs belongs to. Retained for future
+  // ordering/time migration even though letters do not currently expire.
   uint32_t bootId;
   LetterStatus status;
   char trackingCode[AppConfig::kTrackingCodeMaxBytes + 1];

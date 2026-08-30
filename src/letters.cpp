@@ -5,13 +5,15 @@
 
 #include "diagnostics.h"
 #include "storage.h"
+#include "storage_format.h"
 #include "web_utils.h"
 
 namespace {
 
 constexpr char kStorePath[] = "/letters.dat";
-constexpr uint32_t kStoreMagic = 0x4c455452;  // "LETR"
+constexpr uint32_t kStoreMagic = makeStorageMagic('L', 'E', 'T', 'R');
 constexpr uint16_t kStoreVersion = 1;
+constexpr uint16_t kTrackingNumberLimit = 10000;
 
 struct LetterStore {
   uint32_t magic;
@@ -20,7 +22,7 @@ struct LetterStore {
   uint32_t nextId;
   uint32_t totalSubmitted;
   uint16_t nextTrackingNumber;
-  uint16_t reserved;
+  uint16_t reserved;  // Reserved schema space; always zero in version 1.
   LetterRecord records[AppConfig::kMaxLetters];
 };
 
@@ -78,7 +80,8 @@ bool generateTrackingCode(char* destination, size_t destinationSize) {
   }
   for (size_t attempt = 0; attempt < 10000; ++attempt) {
     const uint16_t number = store.nextTrackingNumber;
-    store.nextTrackingNumber = (store.nextTrackingNumber + 1) % 10000;
+    store.nextTrackingNumber =
+        (store.nextTrackingNumber + 1) % kTrackingNumberLimit;
     memcpy(destination, "STRAW-", 6);
     destination[6] = '0' + (number / 1000) % 10;
     destination[7] = '0' + (number / 100) % 10;
@@ -256,7 +259,7 @@ bool startLetters() {
     store.magic = kStoreMagic;
     store.version = kStoreVersion;
     store.nextId = 1;
-    store.nextTrackingNumber = esp_random() % 10000;
+    store.nextTrackingNumber = esp_random() % kTrackingNumberLimit;
   }
   loaded = storageAvailable();
   Serial.printf("Letter store ready: %u letters, %lu submitted.\n",

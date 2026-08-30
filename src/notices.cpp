@@ -26,12 +26,7 @@ bool loaded = false;
 constexpr char kNoticePage[] PROGMEM = R"HTML(
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Notice Board | Strawberry Post</title><style>
-body{margin:0;background:#fff8e7;color:#54261f;font:17px system-ui,sans-serif}
-main{max-width:38rem;margin:auto;padding:1rem}h1{color:#af2631}label{display:block;margin:.8rem 0}
-input,textarea,button{box-sizing:border-box;width:100%;padding:.8rem;font:inherit}textarea{min-height:8rem}
-button{background:#af2631;color:white;border:0;border-radius:.4rem;font-weight:700}.post{background:white;padding:1rem;margin:1rem 0;border-left:5px solid #c94b50}
-</style></head><body><main><p><a href="/">&larr; Strawberry Post</a></p><h1>Notice Board</h1>
+<title>Notice Board | Strawberry Post</title><link rel="stylesheet" href="/style.css"></head><body><main><a class="back" href="/">&larr; Strawberry Post</a><h1>Notice Board</h1><p class="hint">Notices stay up for about eight hours.</p>
 <form id="form"><label>Category<input name="category" maxlength="32" required></label>
 <label>Message<textarea name="message" maxlength="280" required></textarea></label><button>Pin notice</button></form>
 <p id="result" role="status"></p><section id="posts"></section><script>

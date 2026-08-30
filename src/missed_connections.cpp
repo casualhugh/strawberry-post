@@ -25,11 +25,7 @@ bool loaded = false;
 
 constexpr char kMissedPage[] PROGMEM = R"HTML(
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Missed Connections | Strawberry Post</title><style>
-body{margin:0;background:#fff8e7;color:#54261f;font:17px system-ui,sans-serif}main{max-width:38rem;margin:auto;padding:1rem}h1{color:#af2631}
-label{display:block;margin:.8rem 0}input,textarea,button{box-sizing:border-box;width:100%;padding:.8rem;font:inherit}textarea{min-height:8rem}
-button{background:#af2631;color:#fff;border:0;border-radius:.4rem;font-weight:700}.post{background:#fff;padding:1rem;margin:1rem 0;border-left:5px solid #c94b50}
-</style></head><body><main><p><a href="/">&larr; Strawberry Post</a></p><h1>Missed Connections</h1>
+<title>Missed Connections | Strawberry Post</title><link rel="stylesheet" href="/style.css"></head><body><main><a class="back" href="/">&larr; Strawberry Post</a><h1>Missed Connections</h1><p class="hint">For ships that passed in the festival night. Posts stay up for about eight hours.</p>
 <form id="form"><label>To / title<input name="title" maxlength="80" required></label><label>Message<textarea name="message" maxlength="280" required></textarea></label>
 <button>Post connection</button></form><p id="result" role="status"></p><section id="posts"></section><script>
 const form=document.querySelector('#form'),result=document.querySelector('#result'),posts=document.querySelector('#posts');

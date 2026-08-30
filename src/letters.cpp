@@ -28,11 +28,7 @@ bool loaded = false;
 
 constexpr char kLettersPage[] PROGMEM = R"HTML(
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Digital Letters | Strawberry Post</title><style>
-body{margin:0;background:#fff8e7;color:#54261f;font:17px system-ui,sans-serif}main{max-width:38rem;margin:auto;padding:1rem}h1,h2{color:#af2631}
-label{display:block;margin:.8rem 0}input,textarea,button{box-sizing:border-box;width:100%;padding:.8rem;font:inherit}textarea{min-height:9rem}
-button{background:#af2631;color:#fff;border:0;border-radius:.4rem;font-weight:700}.ticket{padding:1rem;background:#fff;border:2px dashed #af2631;margin:1rem 0}
-</style></head><body><main><p><a href="/">&larr; Strawberry Post</a></p><h1>Send a Digital Letter</h1>
+<title>Digital Letters | Strawberry Post</title><link rel="stylesheet" href="/style.css"></head><body><main><a class="back" href="/">&larr; Strawberry Post</a><h1>Send a Digital Letter</h1><p class="hint">Only the Postie can read your message. Keep the tracking code shown after sending.</p>
 <form id="send"><label>Who is it for?<input name="recipient" maxlength="120" required></label><label>Where might we find them?<input name="location" maxlength="80" required></label>
 <label>Your message<textarea name="message" maxlength="500" required></textarea></label><label>Your name (optional)<input name="sender" maxlength="80"></label><button>Send to the Postie</button></form>
 <p id="result" class="ticket" role="status" hidden></p><h2>Track a letter</h2><form id="track"><label>Tracking code<input name="tracking" maxlength="10" placeholder="STRAW-0427" required></label><button>Check status</button></form><p id="status" role="status"></p><script>

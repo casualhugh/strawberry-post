@@ -165,15 +165,15 @@ void handleCreate(WebServer& server) {
 
 bool startNotices() {
   store = {};
-  store.magic = kNoticesMagic;
-  store.version = kNoticesVersion;
-  store.nextId = 1;
-
-  NoticeStore saved{};
-  if (readStorageFile(kNoticesPath, &saved, sizeof(saved)) &&
-      saved.magic == kNoticesMagic && saved.version == kNoticesVersion &&
-      saved.count <= AppConfig::kMaxNotices) {
-    store = saved;
+  const bool valid = readStorageFile(kNoticesPath, &store, sizeof(store)) &&
+                     store.magic == kNoticesMagic &&
+                     store.version == kNoticesVersion &&
+                     store.count <= AppConfig::kMaxNotices;
+  if (!valid) {
+    store = {};
+    store.magic = kNoticesMagic;
+    store.version = kNoticesVersion;
+    store.nextId = 1;
   }
 
   const uint32_t now = millis();

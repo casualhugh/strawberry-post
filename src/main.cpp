@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "dns_server.h"
+#include "letters.h"
 #include "missed_connections.h"
 #include "notices.h"
 #include "storage.h"
@@ -22,6 +23,7 @@ void setup() {
   startStorage();
   startNotices();
   startMissedConnections();
+  startLetters();
   startDnsServer();
   startWebServer();
   Serial.println("Strawberry Post is ready.");

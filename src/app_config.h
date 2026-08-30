@@ -25,5 +25,11 @@ constexpr size_t kMaxNotices = 32;
 constexpr size_t kMissedTitleMaxBytes = 96;
 constexpr size_t kMissedMessageMaxBytes = 512;
 constexpr size_t kMaxMissedConnections = 32;
+constexpr size_t kLetterRecipientMaxBytes = 160;
+constexpr size_t kLetterLocationMaxBytes = 96;
+constexpr size_t kLetterMessageMaxBytes = 768;
+constexpr size_t kLetterSenderMaxBytes = 96;
+constexpr size_t kTrackingCodeMaxBytes = 10;
+constexpr size_t kMaxLetters = 32;
 
 }  // namespace AppConfig

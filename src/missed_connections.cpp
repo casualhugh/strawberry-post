@@ -161,15 +161,15 @@ void handleCreate(WebServer& server) {
 
 bool startMissedConnections() {
   store = {};
-  store.magic = kStoreMagic;
-  store.version = kStoreVersion;
-  store.nextId = 1;
-
-  MissedStore saved{};
-  if (readStorageFile(kStorePath, &saved, sizeof(saved)) &&
-      saved.magic == kStoreMagic && saved.version == kStoreVersion &&
-      saved.count <= AppConfig::kMaxMissedConnections) {
-    store = saved;
+  const bool valid = readStorageFile(kStorePath, &store, sizeof(store)) &&
+                     store.magic == kStoreMagic &&
+                     store.version == kStoreVersion &&
+                     store.count <= AppConfig::kMaxMissedConnections;
+  if (!valid) {
+    store = {};
+    store.magic = kStoreMagic;
+    store.version = kStoreVersion;
+    store.nextId = 1;
   }
 
   const uint32_t now = millis();

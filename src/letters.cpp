@@ -1,0 +1,252 @@
+#include "letters.h"
+
+#include <esp_system.h>
+#include <string.h>
+
+#include "storage.h"
+#include "web_utils.h"
+
+namespace {
+
+constexpr char kStorePath[] = "/letters.dat";
+constexpr uint32_t kStoreMagic = 0x4c455452;  // "LETR"
+constexpr uint16_t kStoreVersion = 1;
+
+struct LetterStore {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t count;
+  uint32_t nextId;
+  uint32_t totalSubmitted;
+  uint16_t nextTrackingNumber;
+  uint16_t reserved;
+  LetterRecord records[AppConfig::kMaxLetters];
+};
+
+LetterStore store{};
+bool loaded = false;
+
+constexpr char kLettersPage[] PROGMEM = R"HTML(
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Digital Letters | Strawberry Post</title><style>
+body{margin:0;background:#fff8e7;color:#54261f;font:17px system-ui,sans-serif}main{max-width:38rem;margin:auto;padding:1rem}h1,h2{color:#af2631}
+label{display:block;margin:.8rem 0}input,textarea,button{box-sizing:border-box;width:100%;padding:.8rem;font:inherit}textarea{min-height:9rem}
+button{background:#af2631;color:#fff;border:0;border-radius:.4rem;font-weight:700}.ticket{padding:1rem;background:#fff;border:2px dashed #af2631;margin:1rem 0}
+</style></head><body><main><p><a href="/">&larr; Strawberry Post</a></p><h1>Send a Digital Letter</h1>
+<form id="send"><label>Who is it for?<input name="recipient" maxlength="120" required></label><label>Where might we find them?<input name="location" maxlength="80" required></label>
+<label>Your message<textarea name="message" maxlength="500" required></textarea></label><label>Your name (optional)<input name="sender" maxlength="80"></label><button>Send to the Postie</button></form>
+<p id="result" class="ticket" role="status" hidden></p><h2>Track a letter</h2><form id="track"><label>Tracking code<input name="tracking" maxlength="10" placeholder="STRAW-0427" required></label><button>Check status</button></form><p id="status" role="status"></p><script>
+const send=document.querySelector('#send'),result=document.querySelector('#result'),track=document.querySelector('#track'),status=document.querySelector('#status');
+send.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/letters',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(send))});const data=await r.json();result.hidden=false;result.textContent=data.error||`Keep this tracking code: ${data.tracking}`;if(r.ok)send.reset()});
+track.addEventListener('submit',async e=>{e.preventDefault();const code=new FormData(track).get('tracking');const r=await fetch('/api/letters/status?tracking='+encodeURIComponent(code));const data=await r.json();status.textContent=data.error||`${data.tracking}: ${data.status}`});
+</script></main></body></html>
+)HTML";
+
+bool persist() {
+  return storageAvailable() &&
+         writeStorageFileAtomic(kStorePath, &store, sizeof(store));
+}
+
+bool trackingExists(const char* code) {
+  for (size_t index = 0; index < store.count; ++index) {
+    if (strcmp(store.records[index].trackingCode, code) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool generateTrackingCode(char* destination, size_t destinationSize) {
+  for (size_t attempt = 0; attempt < 10000; ++attempt) {
+    const uint16_t number = store.nextTrackingNumber;
+    store.nextTrackingNumber = (store.nextTrackingNumber + 1) % 10000;
+    snprintf(destination, destinationSize, "STRAW-%04u", number);
+    if (!trackingExists(destination)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void sendError(WebServer& server, int status, const __FlashStringHelper* message) {
+  String body = F("{\"error\":\"");
+  body += message;
+  body += F("\"}");
+  server.send(status, "application/json; charset=utf-8", body);
+}
+
+void handleCreate(WebServer& server) {
+  if (!loaded || !storageAvailable()) {
+    sendError(server, 503, F("Persistent storage is unavailable"));
+    return;
+  }
+  String recipient = server.arg("recipient");
+  String location = server.arg("location");
+  String message = server.arg("message");
+  String sender = server.arg("sender");
+  recipient.trim();
+  location.trim();
+  message.trim();
+  sender.trim();
+  if (recipient.isEmpty() || location.isEmpty() || message.isEmpty()) {
+    sendError(server, 400, F("Recipient, location and message are required"));
+    return;
+  }
+  if (recipient.length() > AppConfig::kLetterRecipientMaxBytes ||
+      location.length() > AppConfig::kLetterLocationMaxBytes ||
+      message.length() > AppConfig::kLetterMessageMaxBytes ||
+      sender.length() > AppConfig::kLetterSenderMaxBytes) {
+    sendError(server, 413, F("Letter is too long"));
+    return;
+  }
+  if (store.count >= AppConfig::kMaxLetters) {
+    sendError(server, 503, F("The Postie bag is full"));
+    return;
+  }
+
+  LetterRecord& letter = store.records[store.count];
+  memset(&letter, 0, sizeof(letter));
+  if (!generateTrackingCode(letter.trackingCode, sizeof(letter.trackingCode))) {
+    sendError(server, 503, F("No tracking codes are available"));
+    return;
+  }
+  letter.id = store.nextId++;
+  letter.createdAtMs = millis();
+  letter.bootId = persistedBootCount();
+  letter.status = LetterStatus::Waiting;
+  strlcpy(letter.recipient, recipient.c_str(), sizeof(letter.recipient));
+  strlcpy(letter.location, location.c_str(), sizeof(letter.location));
+  strlcpy(letter.message, message.c_str(), sizeof(letter.message));
+  strlcpy(letter.sender, sender.c_str(), sizeof(letter.sender));
+  ++store.count;
+  ++store.totalSubmitted;
+
+  if (!persist()) {
+    --store.count;
+    --store.totalSubmitted;
+    --store.nextId;
+    sendError(server, 507, F("Could not save letter"));
+    return;
+  }
+
+  String response = F("{\"tracking\":\"");
+  response += letter.trackingCode;
+  response += F("\",\"status\":\"Waiting\"}");
+  server.send(201, "application/json; charset=utf-8", response);
+}
+
+void handleStatus(WebServer& server) {
+  String tracking = server.arg("tracking");
+  tracking.trim();
+  tracking.toUpperCase();
+  if (tracking.isEmpty() || tracking.length() > AppConfig::kTrackingCodeMaxBytes) {
+    sendError(server, 400, F("A valid tracking code is required"));
+    return;
+  }
+  for (size_t index = 0; index < store.count; ++index) {
+    const LetterRecord& letter = store.records[index];
+    if (tracking.equals(letter.trackingCode)) {
+      String response = F("{\"tracking\":\"");
+      response += letter.trackingCode;
+      response += F("\",\"status\":\"");
+      response += letterStatusName(letter.status);
+      response += F("\"}");
+      server.send(200, "application/json; charset=utf-8", response);
+      return;
+    }
+  }
+  sendError(server, 404, F("Tracking code not found"));
+}
+
+}  // namespace
+
+bool startLetters() {
+  store = {};
+  const bool valid = readStorageFile(kStorePath, &store, sizeof(store)) &&
+                     store.magic == kStoreMagic &&
+                     store.version == kStoreVersion &&
+                     store.count <= AppConfig::kMaxLetters;
+  if (!valid) {
+    store = {};
+    store.magic = kStoreMagic;
+    store.version = kStoreVersion;
+    store.nextId = 1;
+    store.nextTrackingNumber = esp_random() % 10000;
+  }
+  loaded = storageAvailable();
+  Serial.printf("Letter store ready: %u letters, %lu submitted.\n",
+                static_cast<unsigned>(store.count),
+                static_cast<unsigned long>(store.totalSubmitted));
+  return loaded;
+}
+
+void registerLetterRoutes(WebServer& server) {
+  server.on("/letters", HTTP_GET, [&server]() {
+    server.send_P(200, "text/html; charset=utf-8", kLettersPage);
+  });
+  server.on("/api/letters", HTTP_POST, [&server]() { handleCreate(server); });
+  server.on("/api/letters/status", HTTP_GET,
+            [&server]() { handleStatus(server); });
+}
+
+const char* letterStatusName(LetterStatus status) {
+  switch (status) {
+    case LetterStatus::Waiting:
+      return "Waiting";
+    case LetterStatus::Written:
+      return "Written";
+    case LetterStatus::OutForDelivery:
+      return "OutForDelivery";
+    case LetterStatus::Delivered:
+      return "Delivered";
+    case LetterStatus::CouldNotFind:
+      return "CouldNotFind";
+  }
+  return "Waiting";
+}
+
+size_t letterCount() {
+  return store.count;
+}
+
+uint32_t totalLettersSubmitted() {
+  return store.totalSubmitted;
+}
+
+size_t lettersWithStatus(LetterStatus status) {
+  size_t count = 0;
+  for (size_t index = 0; index < store.count; ++index) {
+    if (store.records[index].status == status) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+const LetterRecord* letterAt(size_t index) {
+  return index < store.count ? &store.records[index] : nullptr;
+}
+
+const LetterRecord* findLetterById(uint32_t id) {
+  for (size_t index = 0; index < store.count; ++index) {
+    if (store.records[index].id == id) {
+      return &store.records[index];
+    }
+  }
+  return nullptr;
+}
+
+bool updateLetterStatus(uint32_t id, LetterStatus status) {
+  for (size_t index = 0; index < store.count; ++index) {
+    if (store.records[index].id == id) {
+      const LetterStatus previous = store.records[index].status;
+      store.records[index].status = status;
+      if (persist()) {
+        return true;
+      }
+      store.records[index].status = previous;
+      return false;
+    }
+  }
+  return false;
+}

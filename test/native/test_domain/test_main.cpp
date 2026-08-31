@@ -4,6 +4,9 @@
 
 #include "strawberry_core.h"
 
+void setUp() {}
+void tearDown() {}
+
 namespace {
 
 using StrawberryCore::CompactionResult;

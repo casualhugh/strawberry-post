@@ -266,10 +266,9 @@ C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
 
 PlatformIO's `native` platform does not install a compiler. On Windows, install
 a current MinGW-w64 toolchain (for example MSYS2 UCRT64 GCC) and prepend its
-`bin` directory to `PATH`. The original development machine currently has no
-host compiler: PlatformIO successfully discovers both suites, but execution is
-blocked at compilation with `gcc`/`g++` not found. The ESP32 build does compile
-the shared library successfully.
+`bin` directory to `PATH`. The development machine uses MSYS2 UCRT64 GCC 16.1.0.
+On 31 August 2026, PlatformIO built and executed both suites successfully: all
+23 test functions passed. The ESP32 build also compiles the shared library.
 
 Useful next native cases are full-board pruning, all-active-letter rejection,
 exact payload comparison after the 32-bit hash prefilter, JSON escaping,

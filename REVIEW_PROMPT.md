@@ -21,15 +21,16 @@ Report build success/failure, warnings, and RAM/flash usage. A build proves only
 compilation; do not claim physical, captive-network, power-loss, SD-card, or
 multi-phone validation unless such evidence exists.
 
-Also inspect both Unity suites under `test/native/`. If a host GCC/G++ compiler
-is available on `PATH`, run:
+Also inspect both Unity suites under `test/native/` and, with a host GCC/G++
+compiler available on `PATH`, run:
 
 ```powershell
 C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
 ```
 
-The original development machine did not have a host compiler, so distinguish
-test code and compile checks from actually executed assertions.
+The latest local run used MSYS2 UCRT64 GCC 16.1.0 and passed all 23 test
+functions. Reproduce that result independently; do not rely on this statement
+as proof of the current checkout.
 
 ## Design specification
 

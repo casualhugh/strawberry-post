@@ -7,6 +7,9 @@
 
 #include "storage_core.h"
 
+void setUp() {}
+void tearDown() {}
+
 namespace {
 
 struct FakeStorage {

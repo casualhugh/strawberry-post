@@ -1,11 +1,14 @@
+Strawberry Post native tests
+============================
 
-This directory is intended for PlatformIO Test Runner and project tests.
+`native/test_domain` covers the allocation-free domain algorithms shared with
+the firmware. `native/test_storage` uses an in-memory file backend to exercise
+validated recovery and deterministic atomic-write failure points.
 
-Unit Testing is a software testing method by which individual units of
-source code, sets of one or more MCU program modules together with associated
-control data, usage procedures, and operating procedures, are tested to
-determine whether they are fit for use. Unit testing finds problems early
-in the development cycle.
+Run only the desktop environment:
 
-More information about PlatformIO Unit Testing:
-- https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+    C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
+
+PlatformIO supplies Unity but not a host compiler. GCC/G++ must be available on
+PATH. Hardware network, captive-portal, LittleFS power-cut, and load behavior
+remain outside these suites.

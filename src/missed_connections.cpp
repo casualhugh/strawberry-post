@@ -5,6 +5,7 @@
 #include "diagnostics.h"
 #include "storage.h"
 #include "storage_format.h"
+#include "strawberry_core.h"
 #include "web_utils.h"
 
 namespace {
@@ -40,7 +41,7 @@ form.addEventListener('submit',async e=>{e.preventDefault();result.textContent='
 )HTML";
 
 bool expired(const MissedConnectionRecord& record, uint32_t now) {
-  return static_cast<int32_t>(now - record.expiresAtMs) >= 0;
+  return StrawberryCore::deadlineReached(now, record.expiresAtMs);
 }
 
 bool persist() {
@@ -48,9 +49,18 @@ bool persist() {
          writeStorageFileAtomic(kStorePath, &store, sizeof(store));
 }
 
-bool validStoreRecords() {
-  for (size_t index = 0; index < store.count; ++index) {
-    const MissedConnectionRecord& record = store.records[index];
+bool validMissedStore(const void* data, size_t size, void*) {
+  if (size != sizeof(MissedStore)) {
+    return false;
+  }
+  const MissedStore& candidate = *static_cast<const MissedStore*>(data);
+  if (candidate.magic != kStoreMagic ||
+      candidate.version != kStoreVersion ||
+      candidate.count > AppConfig::kMaxMissedConnections) {
+    return false;
+  }
+  for (size_t index = 0; index < candidate.count; ++index) {
+    const MissedConnectionRecord& record = candidate.records[index];
     if (record.hidden > 1 ||
         !validStoredText(record.title, sizeof(record.title), false) ||
         !validStoredText(record.message, sizeof(record.message))) {
@@ -60,24 +70,27 @@ bool validStoreRecords() {
   return true;
 }
 
+struct ExpiryContext {
+  uint32_t nowMs;
+};
+
+bool shouldRemoveExpiredConnection(const void* record, void* context) {
+  const MissedConnectionRecord& connection =
+      *static_cast<const MissedConnectionRecord*>(record);
+  const ExpiryContext& expiry = *static_cast<const ExpiryContext*>(context);
+  return expired(connection, expiry.nowMs);
+}
+
+bool commitMissedCompaction(void*) {
+  return persist();
+}
+
 void removeExpired() {
-  const uint32_t now = millis();
-  size_t destination = 0;
-  bool changed = false;
-  for (size_t index = 0; index < store.count; ++index) {
-    if (expired(store.records[index], now)) {
-      changed = true;
-      continue;
-    }
-    if (destination != index) {
-      store.records[destination] = store.records[index];
-    }
-    ++destination;
-  }
-  store.count = destination;
-  if (changed) {
-    persist();
-  }
+  ExpiryContext context{millis()};
+  StrawberryCore::compactRecordsTransactional(
+      store.records, store.count, sizeof(store.records[0]),
+      shouldRemoveExpiredConnection, &context, commitMissedCompaction,
+      nullptr);
 }
 
 void sendError(WebServer& server, int status, const __FlashStringHelper* message) {
@@ -99,7 +112,7 @@ void handleList(WebServer& server) {
   const uint32_t now = millis();
   for (size_t index = 0; index < store.count; ++index) {
     const MissedConnectionRecord& record = store.records[index];
-    if (record.hidden) {
+    if (record.hidden || expired(record, now)) {
       continue;
     }
     response = "";
@@ -217,11 +230,8 @@ void handleCreate(WebServer& server) {
 
 bool startMissedConnections() {
   store = {};
-  const bool valid = readStorageFile(kStorePath, &store, sizeof(store)) &&
-                     store.magic == kStoreMagic &&
-                     store.version == kStoreVersion &&
-                     store.count <= AppConfig::kMaxMissedConnections &&
-                     validStoreRecords();
+  const bool valid = readStorageFileValidated(
+      kStorePath, &store, sizeof(store), validMissedStore);
   if (!valid) {
     store = {};
     store.magic = kStoreMagic;
@@ -262,8 +272,10 @@ void registerMissedConnectionRoutes(WebServer& server) {
 size_t activeMissedConnectionCount() {
   removeExpired();
   size_t count = 0;
+  const uint32_t now = millis();
   for (size_t index = 0; index < store.count; ++index) {
-    if (!store.records[index].hidden) {
+    if (!store.records[index].hidden &&
+        !expired(store.records[index], now)) {
       ++count;
     }
   }
@@ -276,12 +288,30 @@ uint32_t totalMissedConnectionsSubmitted() {
 
 size_t storedMissedConnectionCount() {
   removeExpired();
-  return store.count;
+  size_t count = 0;
+  const uint32_t now = millis();
+  for (size_t index = 0; index < store.count; ++index) {
+    if (!expired(store.records[index], now)) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 const MissedConnectionRecord* missedConnectionAt(size_t index) {
   removeExpired();
-  return index < store.count ? &store.records[index] : nullptr;
+  const uint32_t now = millis();
+  size_t current = 0;
+  for (size_t storedIndex = 0; storedIndex < store.count; ++storedIndex) {
+    if (expired(store.records[storedIndex], now)) {
+      continue;
+    }
+    if (current == index) {
+      return &store.records[storedIndex];
+    }
+    ++current;
+  }
+  return nullptr;
 }
 
 bool setMissedConnectionHidden(uint32_t id, bool hidden) {

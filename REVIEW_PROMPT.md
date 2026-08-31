@@ -21,6 +21,16 @@ Report build success/failure, warnings, and RAM/flash usage. A build proves only
 compilation; do not claim physical, captive-network, power-loss, SD-card, or
 multi-phone validation unless such evidence exists.
 
+Also inspect both Unity suites under `test/native/`. If a host GCC/G++ compiler
+is available on `PATH`, run:
+
+```powershell
+C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
+```
+
+The original development machine did not have a host compiler, so distinguish
+test code and compile checks from actually executed assertions.
+
 ## Design specification
 
 Strawberry Post is a fully offline festival web application hosted entirely by
@@ -122,7 +132,9 @@ separately authorized.
 
 Every stage was required to build before the next and remain a separate commit.
 Note that `532fa0c` is an additional Stage 1 design-decision commit, not a stage
-number. Determine actual compliance from code and history, not commit titles.
+number. A later, post-stage refactor extracted `lib/strawberry_core/` and added
+native tests. Determine actual compliance from code and history, not commit
+titles.
 
 ## Known decisions to assess rather than silently reinterpret
 
@@ -170,8 +182,8 @@ number. Determine actual compliance from code and history, not commit titles.
 - Walk every failure/power-cut point in `writeStorageFileAtomic`: temporary
   creation, write, flush/close, backup removal, both renames, restoration, and
   cleanup. Consider ignored errors and orphaned files.
-- Review backup fallback. An exact-sized primary can pass raw reading and later
-  fail semantic validation without giving callers a chance to validate backup.
+- Review validated backup fallback, reported load source, rejected-primary
+  removal, backup-only recovery, and failure to prepare that recovery.
 - Inspect expiry compaction and every mutation rollback; determine whether a
   failed persist can resurrect content on reboot.
 - Evaluate blank-partition detection, its 64-byte probe, hard-coded partition
@@ -191,7 +203,7 @@ number. Determine actual compliance from code and history, not commit titles.
 
 ### Time and expiry
 
-- Prove or disprove wrap safety of signed-delta `millis()` comparisons.
+- Prove or disprove the half-range `millis()` deadline comparison's wrap safety.
 - Assess reboot extension, repeated power cycles, misleading creation values,
   cleanup timing, and persistence failure during cleanup.
 - Review all boot, ID, request, total, and tracking counter wrap behavior.
@@ -259,10 +271,12 @@ number. Determine actual compliance from code and history, not commit titles.
   reset reason, stack high-water, latency/status, rejected/duplicate,
   persistence-failure, and DNS-health signals.
 - Note that the diagnostics request records itself before reporting `lastUri`.
-- Confirm the repository has no real unit, integration, hardware, captive,
-  power-cut, soak, or multi-phone evidence beyond builds.
-- Evaluate the README’s proposed native-test seam: pure domain logic, fake clock,
-  memory file store, corruption/failure injection, and Unity/native PlatformIO.
+- Review whether the 23 native test functions exercise the production pure-core
+  implementations and whether the fake clock, memory file store, corruption,
+  and failure injection model the claimed branches. Do not report them as
+  executed unless a native runner actually completed them.
+- Confirm there is still no hardware, captive, real LittleFS power-cut, soak,
+  or multi-phone test evidence.
 - Evaluate—not implement—the SD asset proposal. LittleFS should remain internal
   data storage; laptop-editable SD should use FAT/FAT32 through `SD`/`SD_MMC`.
   Assess boot-only read, PSRAM cache, manifest/hash/size validation, read-only
@@ -306,4 +320,3 @@ After findings, provide:
 - remaining assumptions and questions.
 
 Do not modify the repository or provide a patch.
-

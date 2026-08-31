@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include <esp_partition.h>
 
+#include "storage_core.h"
 #include "storage_format.h"
 
 namespace {
@@ -27,6 +28,59 @@ struct PersistentState {
 
 bool mounted = false;
 uint32_t bootCount = 0;
+
+bool littleFsReadExact(void*, const char* path, void* destination,
+                       size_t size) {
+  File file = LittleFS.open(path, FILE_READ);
+  if (!file || file.size() != size) {
+    if (file) {
+      file.close();
+    }
+    return false;
+  }
+  const size_t bytesRead =
+      file.read(static_cast<uint8_t*>(destination), size);
+  file.close();
+  return bytesRead == size;
+}
+
+bool littleFsWriteExact(void*, const char* path, const void* data,
+                        size_t size) {
+  File file = LittleFS.open(path, FILE_WRITE);
+  if (!file) {
+    return false;
+  }
+  const size_t bytesWritten =
+      file.write(static_cast<const uint8_t*>(data), size);
+  file.flush();
+  file.close();
+  return bytesWritten == size;
+}
+
+bool littleFsExists(void*, const char* path) {
+  return LittleFS.exists(path);
+}
+
+bool littleFsRemove(void*, const char* path) {
+  return LittleFS.remove(path);
+}
+
+bool littleFsRename(void*, const char* from, const char* to) {
+  return LittleFS.rename(from, to);
+}
+
+const StrawberryCore::StorageOperations kLittleFsOperations{
+    nullptr, littleFsReadExact, littleFsWriteExact, littleFsExists,
+    littleFsRemove, littleFsRename};
+
+bool validPersistentState(const void* data, size_t size, void*) {
+  if (size != sizeof(PersistentState)) {
+    return false;
+  }
+  const PersistentState& state =
+      *static_cast<const PersistentState*>(data);
+  return state.magic == kStateMagic && state.version == kStateVersion;
+}
 
 bool filesystemPartitionLooksBlank() {
   const esp_partition_t* partition = esp_partition_find_first(
@@ -72,8 +126,11 @@ bool mountFilesystem() {
 
 }  // namespace
 
-bool readStorageFile(const char* path, void* destination, size_t size) {
-  if (!mounted || path == nullptr || destination == nullptr || size == 0) {
+bool readStorageFileValidated(const char* path, void* destination, size_t size,
+                              StorageFileValidator validator,
+                              void* validatorContext) {
+  if (!mounted || path == nullptr || destination == nullptr || size == 0 ||
+      validator == nullptr) {
     return false;
   }
 
@@ -81,22 +138,22 @@ bool readStorageFile(const char* path, void* destination, size_t size) {
   if (!makeSiblingPath(path, ".bak", backupPath, sizeof(backupPath))) {
     return false;
   }
-
-  auto readPath = [destination, size](const char* readablePath) {
-    File file = LittleFS.open(readablePath, FILE_READ);
-    if (!file || file.size() != size) {
-      if (file) {
-        file.close();
-      }
-      return false;
-    }
-    const size_t bytesRead =
-        file.read(static_cast<uint8_t*>(destination), size);
-    file.close();
-    return bytesRead == size;
-  };
-
-  return readPath(path) || readPath(backupPath);
+  const StrawberryCore::StorageLoadSource source =
+      StrawberryCore::readStorageWithFallback(
+          kLittleFsOperations, path, backupPath, destination, size, validator,
+          validatorContext);
+  if (source == StrawberryCore::StorageLoadSource::None) {
+    return false;
+  }
+  if (source == StrawberryCore::StorageLoadSource::Backup &&
+      !StrawberryCore::prepareBackupRecovery(kLittleFsOperations, path)) {
+    Serial.printf(
+        "Could not remove rejected storage primary %s; disabling writes.\n",
+        path);
+    mounted = false;
+    return false;
+  }
+  return true;
 }
 
 bool writeStorageFileAtomic(const char* path, const void* data, size_t size) {
@@ -111,35 +168,8 @@ bool writeStorageFileAtomic(const char* path, const void* data, size_t size) {
     return false;
   }
 
-  LittleFS.remove(temporaryPath);
-  File file = LittleFS.open(temporaryPath, FILE_WRITE);
-  if (!file) {
-    return false;
-  }
-
-  const size_t bytesWritten =
-      file.write(static_cast<const uint8_t*>(data), size);
-  file.flush();
-  file.close();
-  if (bytesWritten != size) {
-    LittleFS.remove(temporaryPath);
-    return false;
-  }
-
-  LittleFS.remove(backupPath);
-  if (LittleFS.exists(path) && !LittleFS.rename(path, backupPath)) {
-    LittleFS.remove(temporaryPath);
-    return false;
-  }
-  if (!LittleFS.rename(temporaryPath, path)) {
-    LittleFS.remove(temporaryPath);
-    if (LittleFS.exists(backupPath)) {
-      LittleFS.rename(backupPath, path);
-    }
-    return false;
-  }
-  LittleFS.remove(backupPath);
-  return true;
+  return StrawberryCore::writeStorageAtomic(
+      kLittleFsOperations, path, temporaryPath, backupPath, data, size);
 }
 
 bool startStorage() {
@@ -151,8 +181,8 @@ bool startStorage() {
 
   PersistentState state{kStateMagic, kStateVersion, 0, 0};
   PersistentState loaded{};
-  if (readStorageFile(kStatePath, &loaded, sizeof(loaded)) &&
-      loaded.magic == kStateMagic && loaded.version == kStateVersion) {
+  if (readStorageFileValidated(kStatePath, &loaded, sizeof(loaded),
+                               validPersistentState)) {
     state = loaded;
   } else {
     Serial.println("Creating persistent system state.");

@@ -6,6 +6,7 @@
 #include "diagnostics.h"
 #include "storage.h"
 #include "storage_format.h"
+#include "strawberry_core.h"
 #include "web_utils.h"
 
 namespace {
@@ -13,7 +14,6 @@ namespace {
 constexpr char kStorePath[] = "/letters.dat";
 constexpr uint32_t kStoreMagic = makeStorageMagic('L', 'E', 'T', 'R');
 constexpr uint16_t kStoreVersion = 1;
-constexpr uint16_t kTrackingNumberLimit = 10000;
 
 struct LetterStore {
   uint32_t magic;
@@ -45,27 +45,64 @@ track.addEventListener('submit',async e=>{e.preventDefault();const code=new Form
 )HTML";
 
 bool persist() {
+  // Letter records are private. Never serialize stale data from inactive slots
+  // after a failed create or future pruning/deletion work.
+  for (size_t index = store.count; index < AppConfig::kMaxLetters; ++index) {
+    memset(&store.records[index], 0, sizeof(store.records[index]));
+  }
   return storageAvailable() &&
          writeStorageFileAtomic(kStorePath, &store, sizeof(store));
 }
 
-bool validStoreRecords() {
-  for (size_t index = 0; index < store.count; ++index) {
-    const LetterRecord& letter = store.records[index];
-    if (static_cast<uint8_t>(letter.status) >
-            static_cast<uint8_t>(LetterStatus::CouldNotFind) ||
-        !validStoredText(letter.trackingCode, sizeof(letter.trackingCode), false) ||
-        !validStoredText(letter.recipient, sizeof(letter.recipient), false) ||
-        !validStoredText(letter.location, sizeof(letter.location), false) ||
-        !validStoredText(letter.message, sizeof(letter.message)) ||
-        !validStoredText(letter.sender, sizeof(letter.sender), false)) {
+bool validTrackingCode(const char* code) {
+  if (code == nullptr ||
+      strnlen(code, StrawberryCore::kTrackingCodeBytes + 1) !=
+          StrawberryCore::kTrackingCodeBytes ||
+      memcmp(code, StrawberryCore::kTrackingPrefix,
+             StrawberryCore::kTrackingPrefixBytes) != 0) {
+    return false;
+  }
+  for (size_t index = StrawberryCore::kTrackingPrefixBytes;
+       index < StrawberryCore::kTrackingCodeBytes; ++index) {
+    if (code[index] < '0' || code[index] > '9') {
       return false;
     }
   }
   return true;
 }
 
-bool trackingExists(const char* code) {
+bool validLetterStore(const void* data, size_t size, void*) {
+  if (size != sizeof(LetterStore)) {
+    return false;
+  }
+  const LetterStore& candidate = *static_cast<const LetterStore*>(data);
+  if (candidate.magic != kStoreMagic || candidate.version != kStoreVersion ||
+      candidate.count > AppConfig::kMaxLetters ||
+      candidate.nextTrackingNumber >= StrawberryCore::kTrackingNumberLimit) {
+    return false;
+  }
+  for (size_t index = 0; index < candidate.count; ++index) {
+    const LetterRecord& letter = candidate.records[index];
+    if (static_cast<uint8_t>(letter.status) >
+            static_cast<uint8_t>(LetterStatus::CouldNotFind) ||
+        !validTrackingCode(letter.trackingCode) ||
+        !validStoredText(letter.recipient, sizeof(letter.recipient), false) ||
+        !validStoredText(letter.location, sizeof(letter.location), false) ||
+        !validStoredText(letter.message, sizeof(letter.message)) ||
+        !validStoredText(letter.sender, sizeof(letter.sender), false)) {
+      return false;
+    }
+    for (size_t previous = 0; previous < index; ++previous) {
+      if (strcmp(candidate.records[previous].trackingCode,
+                 letter.trackingCode) == 0) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool trackingExists(const char* code, void*) {
   for (size_t index = 0; index < store.count; ++index) {
     if (strcmp(store.records[index].trackingCode, code) == 0) {
       return true;
@@ -75,24 +112,14 @@ bool trackingExists(const char* code) {
 }
 
 bool generateTrackingCode(char* destination, size_t destinationSize) {
-  if (destination == nullptr || destinationSize < 11) {
+  uint16_t nextNumber = store.nextTrackingNumber;
+  if (!StrawberryCore::allocateTrackingCode(
+          store.nextTrackingNumber, destination, destinationSize,
+          trackingExists, nullptr, nextNumber)) {
     return false;
   }
-  for (size_t attempt = 0; attempt < 10000; ++attempt) {
-    const uint16_t number = store.nextTrackingNumber;
-    store.nextTrackingNumber =
-        (store.nextTrackingNumber + 1) % kTrackingNumberLimit;
-    memcpy(destination, "STRAW-", 6);
-    destination[6] = '0' + (number / 1000) % 10;
-    destination[7] = '0' + (number / 100) % 10;
-    destination[8] = '0' + (number / 10) % 10;
-    destination[9] = '0' + number % 10;
-    destination[10] = '\0';
-    if (!trackingExists(destination)) {
-      return true;
-    }
-  }
-  return false;
+  store.nextTrackingNumber = nextNumber;
+  return true;
 }
 
 void sendError(WebServer& server, int status, const __FlashStringHelper* message) {
@@ -152,6 +179,7 @@ void handleCreate(WebServer& server) {
   bool pruned = false;
   size_t prunedIndex = 0;
   LetterRecord prunedRecord{};
+  const uint16_t previousTrackingNumber = store.nextTrackingNumber;
   if (store.count >= AppConfig::kMaxLetters) {
     bool foundCompleted = false;
     for (size_t index = 0; index < store.count; ++index) {
@@ -178,6 +206,14 @@ void handleCreate(WebServer& server) {
   LetterRecord& letter = store.records[store.count];
   memset(&letter, 0, sizeof(letter));
   if (!generateTrackingCode(letter.trackingCode, sizeof(letter.trackingCode))) {
+    store.nextTrackingNumber = previousTrackingNumber;
+    if (pruned) {
+      for (size_t index = store.count; index > prunedIndex; --index) {
+        store.records[index] = store.records[index - 1];
+      }
+      store.records[prunedIndex] = prunedRecord;
+      ++store.count;
+    }
     sendError(server, 503, F("No tracking codes are available"));
     return;
   }
@@ -196,12 +232,16 @@ void handleCreate(WebServer& server) {
     --store.count;
     --store.totalSubmitted;
     --store.nextId;
+    store.nextTrackingNumber = previousTrackingNumber;
     if (pruned) {
       for (size_t index = store.count; index > prunedIndex; --index) {
         store.records[index] = store.records[index - 1];
       }
       store.records[prunedIndex] = prunedRecord;
       ++store.count;
+    } else {
+      memset(&store.records[store.count], 0,
+             sizeof(store.records[store.count]));
     }
     sendError(server, 507, F("Could not save letter"));
     return;
@@ -250,16 +290,15 @@ void handleStatus(WebServer& server) {
 
 bool startLetters() {
   store = {};
-  const bool valid = readStorageFile(kStorePath, &store, sizeof(store)) &&
-                     store.magic == kStoreMagic &&
-                     store.version == kStoreVersion &&
-                     store.count <= AppConfig::kMaxLetters && validStoreRecords();
+  const bool valid = readStorageFileValidated(
+      kStorePath, &store, sizeof(store), validLetterStore);
   if (!valid) {
     store = {};
     store.magic = kStoreMagic;
     store.version = kStoreVersion;
     store.nextId = 1;
-    store.nextTrackingNumber = esp_random() % kTrackingNumberLimit;
+    store.nextTrackingNumber =
+        esp_random() % StrawberryCore::kTrackingNumberLimit;
   }
   loaded = storageAvailable();
   Serial.printf("Letter store ready: %u letters, %lu submitted.\n",

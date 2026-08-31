@@ -114,6 +114,8 @@ Important modules:
 - `src/web_utils.*` — JSON escaping, UTF-8 validation, request policy, and
   duplicate-submission hashing.
 - `src/diagnostics.*` — request counters and runtime health reporting.
+- `lib/strawberry_core/` — allocation-free C++11 domain and storage algorithms
+  shared by firmware and desktop tests, with no Arduino dependency.
 
 The HTTP server is intentionally synchronous. Several phones can remain
 associated with the AP, but HTTP requests are handled one at a time. Flash
@@ -144,10 +146,21 @@ schema version. There is currently no checksum or migration layer. Any future
 record-layout change must deliberately bump the version and define whether old
 festival data is migrated, exported, or discarded.
 
-Writes use a temporary file and backup rename sequence. If LittleFS fails to
-mount and the partition appears non-blank, firmware refuses to format it. An
-apparently blank first-use partition may be formatted. The public UI remains in
-program flash, but new submissions return a storage-unavailable response.
+Writes use a temporary file and backup rename sequence. Reads validate each
+candidate before accepting it, so an exact-sized but semantically invalid
+primary can fall back to a valid backup. A backup-only recovery copy is retained
+until a new primary is promoted. After a backup wins validation, the rejected
+primary is removed before later writes; if that removal fails, persistence is
+disabled rather than risking the valid backup. If LittleFS fails to mount and
+the partition appears non-blank, firmware refuses to format it. An apparently
+blank first-use partition may be formatted. The public UI remains in program
+flash, but new submissions return a storage-unavailable response.
+
+Expired public-record compaction is transactional in RAM: if the replacement
+write fails, the original count and byte order are restored so a later access
+can retry. Expired records are still filtered from public results during that
+failure. This is deterministic logic, not proof of LittleFS behavior during a
+physical power cut.
 
 Notice and missed-connection stores prune their oldest record when full. A full
 letter store prunes the oldest completed/failed letter; if all 32 letters are
@@ -219,38 +232,49 @@ C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe device monitor --baud 115
 The firmware has compiled successfully, but no claim is made that it has been
 flashed, power-cycle tested, captive-portal tested, or load tested on hardware.
 
-## Pre-hardware testing plan
+## Native tests before hardware
 
-Compilation is useful but insufficient. Most domain behavior can be tested on
-the development computer after a small separation between Arduino adapters and
-pure logic.
+The repository now has two PlatformIO/Unity desktop suites containing 23 test
+functions under `test/native/`. Production firmware calls the same
+platform-neutral implementations; the tests do not carry a second copy of the
+algorithms. Explicit `nowMs` arguments provide a fake-clock seam, while an
+injected memory file backend supplies deterministic read, write, remove, rename,
+corruption, and failure behavior.
 
-Recommended host-test structure:
+Current automated coverage includes:
 
-1. Add a PlatformIO `native` test environment using the bundled Unity test
-   framework.
-2. Extract platform-neutral functions/classes for expiry, pruning, tracking
-   allocation, duplicate decisions, record validation, and storage encoding.
-3. Inject a fake monotonic clock instead of calling `millis()` inside domain
-   logic.
-4. Inject a memory-backed file store so successful writes, short writes,
-   corrupt primaries, valid backups, and failures at each replacement step can
-   be reproduced deterministically.
-5. Keep `WiFi`, `WebServer`, `LittleFS`, and `SD` in thin ESP32-only adapters.
+- expiry just before, at, and after a deadline, including `millis()` rollover;
+- UTF-8 scalar boundaries, four-byte emoji, controls, truncation, overlong
+  forms, surrogates, invalid continuations, and values above U+10FFFF;
+- deterministic FNV-1a field hashing and wrap-safe duplicate-window timing;
+- tracking formatting, occupied-code search, `9999` to `0000` wrap, exhaustion,
+  and a cursor that is not mutated until allocation succeeds;
+- stable expiry compaction and byte-for-byte RAM rollback after commit failure;
+- primary/backup semantic validation and exact-sized corrupt-primary fallback;
+- rejected-primary cleanup and preservation of the valid backup when the next
+  temporary-to-primary promotion fails;
+- atomic replacement success plus failures while writing, removing a stale
+  backup, renaming the primary, promoting the temporary, and restoring backup;
+- preservation of a readable recovery copy when only a backup exists.
 
-High-value native test cases:
+Run the suites with a host GCC/G++ compiler available on `PATH`:
 
-- `millis()` wraparound and expiry just before/at/after the deadline.
-- Reboot policy for active public records.
-- Full-board pruning and full-active-letter rejection.
-- Tracking collision search, wraparound, pruning, and later code reuse.
-- Empty, whitespace, boundary-length, emoji-heavy, and malformed UTF-8 input.
-- JSON escaping for quotes, slashes, controls, and multibyte text.
-- Duplicate tap, alternating payload, timeout, and hash-collision behavior.
-- Valid, wrong-version, wrong-magic, truncated, exact-sized-corrupt, and backup
-  persistence fixtures.
-- RAM rollback after every simulated write failure.
-- Statistics after create, moderate, status change, expiry, and pruning.
+```powershell
+$env:PYTHONUTF8 = '1'
+C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
+```
+
+PlatformIO's `native` platform does not install a compiler. On Windows, install
+a current MinGW-w64 toolchain (for example MSYS2 UCRT64 GCC) and prepend its
+`bin` directory to `PATH`. The original development machine currently has no
+host compiler: PlatformIO successfully discovers both suites, but execution is
+blocked at compilation with `gcc`/`g++` not found. The ESP32 build does compile
+the shared library successfully.
+
+Useful next native cases are full-board pruning, all-active-letter rejection,
+exact payload comparison after the 32-bit hash prefilter, JSON escaping,
+record-ID/counter wrap, statistics, and complete endpoint/domain mutation
+rollback. Those require further separation from the current HTTP handlers.
 
 Additional pre-hardware checks:
 
@@ -347,21 +371,23 @@ display module belong in the project yet.
 
 ## Recommended next work, excluding display
 
-1. Implement the native test seam and high-value tests above.
-2. Pin the known-good PlatformIO platform/framework versions for reproducible
+1. Install a current host compiler, run the checked-in native suites, and add
+   them to CI so a missing local compiler cannot leave them unexecuted.
+2. Extend the domain seam to cover full-store pruning, exact duplicate payload
+   comparison, statistics, and complete mutation rollback.
+3. Pin the known-good PlatformIO platform/framework versions for reproducible
    builds.
-3. Add checksums/generation metadata and explicit migration/recovery behavior
+4. Add checksums/generation metadata and explicit migration/recovery behavior
    to persistent formats.
-4. Decide whether reboot-extended public expiry is acceptable; otherwise add an
+5. Decide whether reboot-extended public expiry is acceptable; otherwise add an
    admin-set festival clock or battery-backed RTC.
-5. Add a deployment guard that refuses Postie access while the default password
+6. Add a deployment guard that refuses Postie access while the default password
    remains configured.
-6. Decide letter retention/deletion policy and whether tracking codes need a
+7. Decide letter retention/deletion policy and whether tracking codes need a
    larger, less enumerable namespace.
-7. Prototype the read-only SD asset provider behind a compile-time flag after
+8. Prototype the read-only SD asset provider behind a compile-time flag after
    choosing the exact card hardware and wiring.
-8. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
+9. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
    `.local` is commonly treated as mDNS-special.
-9. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
+10. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
    hardware tests while watching protected diagnostics.
-

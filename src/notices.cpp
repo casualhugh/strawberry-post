@@ -5,6 +5,7 @@
 #include "diagnostics.h"
 #include "storage.h"
 #include "storage_format.h"
+#include "strawberry_core.h"
 #include "web_utils.h"
 
 namespace {
@@ -42,7 +43,7 @@ form.addEventListener('submit',async e=>{e.preventDefault();result.textContent='
 )HTML";
 
 bool expired(const NoticeRecord& notice, uint32_t now) {
-  return static_cast<int32_t>(now - notice.expiresAtMs) >= 0;
+  return StrawberryCore::deadlineReached(now, notice.expiresAtMs);
 }
 
 bool persist() {
@@ -50,9 +51,18 @@ bool persist() {
          writeStorageFileAtomic(kNoticesPath, &store, sizeof(store));
 }
 
-bool validStoreRecords() {
-  for (size_t index = 0; index < store.count; ++index) {
-    const NoticeRecord& notice = store.records[index];
+bool validNoticeStore(const void* data, size_t size, void*) {
+  if (size != sizeof(NoticeStore)) {
+    return false;
+  }
+  const NoticeStore& candidate = *static_cast<const NoticeStore*>(data);
+  if (candidate.magic != kNoticesMagic ||
+      candidate.version != kNoticesVersion ||
+      candidate.count > AppConfig::kMaxNotices) {
+    return false;
+  }
+  for (size_t index = 0; index < candidate.count; ++index) {
+    const NoticeRecord& notice = candidate.records[index];
     if (notice.hidden > 1 ||
         !validStoredText(notice.category, sizeof(notice.category), false) ||
         !validStoredText(notice.message, sizeof(notice.message))) {
@@ -62,24 +72,25 @@ bool validStoreRecords() {
   return true;
 }
 
+struct ExpiryContext {
+  uint32_t nowMs;
+};
+
+bool shouldRemoveExpiredNotice(const void* record, void* context) {
+  const NoticeRecord& notice = *static_cast<const NoticeRecord*>(record);
+  const ExpiryContext& expiry = *static_cast<const ExpiryContext*>(context);
+  return expired(notice, expiry.nowMs);
+}
+
+bool commitNoticeCompaction(void*) {
+  return persist();
+}
+
 void removeExpired() {
-  const uint32_t now = millis();
-  size_t destination = 0;
-  bool changed = false;
-  for (size_t index = 0; index < store.count; ++index) {
-    if (expired(store.records[index], now)) {
-      changed = true;
-      continue;
-    }
-    if (destination != index) {
-      store.records[destination] = store.records[index];
-    }
-    ++destination;
-  }
-  store.count = destination;
-  if (changed) {
-    persist();
-  }
+  ExpiryContext context{millis()};
+  StrawberryCore::compactRecordsTransactional(
+      store.records, store.count, sizeof(store.records[0]),
+      shouldRemoveExpiredNotice, &context, commitNoticeCompaction, nullptr);
 }
 
 void sendError(WebServer& server, int status, const __FlashStringHelper* message) {
@@ -101,7 +112,7 @@ void handleList(WebServer& server) {
   const uint32_t now = millis();
   for (size_t index = 0; index < store.count; ++index) {
     const NoticeRecord& notice = store.records[index];
-    if (notice.hidden) {
+    if (notice.hidden || expired(notice, now)) {
       continue;
     }
     response = "";
@@ -219,10 +230,8 @@ void handleCreate(WebServer& server) {
 
 bool startNotices() {
   store = {};
-  const bool valid = readStorageFile(kNoticesPath, &store, sizeof(store)) &&
-                     store.magic == kNoticesMagic &&
-                     store.version == kNoticesVersion &&
-                     store.count <= AppConfig::kMaxNotices && validStoreRecords();
+  const bool valid = readStorageFileValidated(
+      kNoticesPath, &store, sizeof(store), validNoticeStore);
   if (!valid) {
     store = {};
     store.magic = kNoticesMagic;
@@ -264,8 +273,9 @@ void registerNoticeRoutes(WebServer& server) {
 size_t activeNoticeCount() {
   removeExpired();
   size_t count = 0;
+  const uint32_t now = millis();
   for (size_t index = 0; index < store.count; ++index) {
-    if (!store.records[index].hidden) {
+    if (!store.records[index].hidden && !expired(store.records[index], now)) {
       ++count;
     }
   }
@@ -278,12 +288,30 @@ uint32_t totalNoticesSubmitted() {
 
 size_t storedNoticeCount() {
   removeExpired();
-  return store.count;
+  size_t count = 0;
+  const uint32_t now = millis();
+  for (size_t index = 0; index < store.count; ++index) {
+    if (!expired(store.records[index], now)) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 const NoticeRecord* noticeAt(size_t index) {
   removeExpired();
-  return index < store.count ? &store.records[index] : nullptr;
+  const uint32_t now = millis();
+  size_t current = 0;
+  for (size_t storedIndex = 0; storedIndex < store.count; ++storedIndex) {
+    if (expired(store.records[storedIndex], now)) {
+      continue;
+    }
+    if (current == index) {
+      return &store.records[storedIndex];
+    }
+    ++current;
+  }
+  return nullptr;
 }
 
 bool setNoticeHidden(uint32_t id, bool hidden) {

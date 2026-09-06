@@ -52,7 +52,6 @@ LETTER_STATUSES = {
 
 PAGE_FILES = {
     "/": "index.html",
-    "/notices": "index.html",
     "/letters": "letters.html",
     "/postie": "postie.html",
     "/postie/diagnostics": "diagnostics.html",

@@ -120,9 +120,8 @@ separately authorized.
 - **Stage 5 — Missed Connections:** originally implemented as a separate
   persistent feature, then deliberately folded into the Notice Board as the
   `Missed Connection` category. The obsolete store, API, page, and moderation
-  route should be absent from the current product. An old `/missed.dat` file is
-  intentionally ignored rather than migrated because hardware deployment has
-  not begun.
+  route should be absent from the current product. There is no deployed data or
+  backward-compatibility requirement.
 - **Stage 6 — Digital Letters:** persistent `POST /api/letters`, unique friendly
   tracking codes, and public status-only lookup.
 - **Stage 7 — Postie/Admin:** authenticated private letter workflow, all status

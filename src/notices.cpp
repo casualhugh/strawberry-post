@@ -13,7 +13,7 @@ namespace {
 
 constexpr char kNoticesPath[] = "/notices.dat";
 constexpr uint32_t kNoticesMagic = makeStorageMagic('N', 'O', 'T', 'C');
-constexpr uint16_t kNoticesVersion = 2;
+constexpr uint16_t kNoticesVersion = 1;
 // Keep this list in sync with the category dropdown in web/index.html. The
 // server validates it too so clients cannot create unexpected categories by
 // bypassing the browser form.
@@ -270,12 +270,6 @@ bool startNotices() {
 }
 
 void registerNoticeRoutes(WebServer& server) {
-  server.on("/notices", HTTP_GET,
-            [&server]() {
-              recordHttpRequest(server);
-              server.send_P(200, "text/html; charset=utf-8",
-                            WebAssets::kHomePage);
-            });
   server.on("/api/notices", HTTP_GET, [&server]() { handleList(server); });
   server.on("/api/notices", HTTP_POST, [&server]() { handleCreate(server); });
 }

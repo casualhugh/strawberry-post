@@ -81,7 +81,7 @@ class WebPreviewTests(unittest.TestCase):
             self.assertIn(f"<option>{html.escape(category)}</option>", index)
 
     def test_pages_styles_and_postie_authentication_are_served(self) -> None:
-        for path in ("/", "/notices", "/letters", "/style.css"):
+        for path in ("/", "/letters", "/style.css"):
             status, body, headers = self.request(path)
             self.assertEqual(200, status, path)
             self.assertGreater(len(body), 100, path)

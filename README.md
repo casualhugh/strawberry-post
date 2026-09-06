@@ -143,12 +143,8 @@ readable in code instead of duplicating unexplained hexadecimal constants.
 Current files are:
 
 - `/system.dat` — `STPS`, schema 1
-- `/notices.dat` — `NOTC`, schema 2
+- `/notices.dat` — `NOTC`, schema 1
 - `/letters.dat` — `LETR`, schema 1
-
-Early development builds also wrote `/missed.dat`. The current firmware neither
-opens nor deletes that obsolete pre-hardware file; Missed Connection posts now
-use `/notices.dat` like every other notice category.
 
 Files are native fixed C++ binary snapshots. That is compact and bounded, but
 it couples data compatibility to struct layout, capacity, compiler ABI, and
@@ -200,7 +196,6 @@ admin endpoint.
 | --- | --- | --- |
 | GET | `/` | Notice Board landing page, posting form, and derived summary |
 | GET | `/style.css` | Flash-resident public stylesheet |
-| GET | `/notices` | Compatibility alias for the Notice Board landing page |
 | GET/POST | `/api/notices` | List/create notices |
 | GET | `/letters` | Letter submission and tracking page |
 | POST | `/api/letters` | Create a private letter |

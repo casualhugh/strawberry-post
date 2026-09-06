@@ -38,6 +38,13 @@ Strawberry Post is a fully offline festival web application hosted entirely by
 an ESP32-S3. It creates an open local Wi-Fi AP; phones connect directly. There
 is no internet, cloud account, upstream router, external asset, or CDN.
 
+The selected device is an Elecrow CrowPanel 5.79-inch black-and-white E-Paper
+HMI (272 × 792) using an ESP32-S3-WROOM-1-N8R8 module. A project-owned
+PlatformIO board manifest configures its 8 MB QSPI flash, 8 MB OPI PSRAM,
+240 MHz CPU, and UART upload. `HARDWARE.md` is the canonical pin and peripheral
+power map. Display, buttons, and TF-card drivers are intentionally not yet
+implemented.
+
 Public features:
 
 1. Notice Board, which is the landing page and includes a fixed category list;

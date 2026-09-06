@@ -217,10 +217,16 @@ admin endpoint.
 PlatformIO environment:
 
 - Platform: `espressif32`
-- Board: `adafruit_feather_esp32s3`
+- Board: `crowpanel_579_epaper` (project-owned definition for the Elecrow
+  CrowPanel 5.79-inch E-Paper and its ESP32-S3-WROOM-1-N8R8 module)
 - Framework: Arduino
 - Environment: `esp32s3`
 - Filesystem: LittleFS
+
+The custom board manifest in `boards/crowpanel_579_epaper.json` configures 8 MB
+QSPI flash, 8 MB OPI PSRAM, and serial upload through the panel's USB-to-UART
+bridge. See [HARDWARE.md](HARDWARE.md) for the verified board pins and power
+controls.
 
 PlatformIO is not assumed to be on `PATH` on the original development machine.
 
@@ -344,11 +350,10 @@ LittleFS is designed for a flash partition attached to the ESP32. A removable,
 laptop-editable SD card should instead be FAT/FAT32 and mounted with Arduino's
 `SD` library over SPI or `SD_MMC` with suitable hardware wiring.
 
-The current Feather target does not provide an onboard microSD slot. It needs a
-microSD breakout or FeatherWing. The installed board variant currently defines
-`SCK=36`, `MOSI=35`, `MISO=37`, and `SS=42`, but these are not committed as the
-hardware design. The selected card board's chip-select pin, voltage regulation,
-pull-ups, wiring length, and compatibility must be verified first.
+The selected CrowPanel provides an onboard TF-card slot on a dedicated SPI bus.
+Its CS, MOSI, SCK, MISO, and active-high power-enable assignments are recorded
+in [HARDWARE.md](HARDWARE.md). The removable web-asset design below remains a
+proposal: the firmware does not yet mount the card or load assets from it.
 
 Recommended separation:
 

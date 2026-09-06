@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Postie | Strawberry Post</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="admin">
+  <main>
+    <h1>Postie&rsquo;s Sorting Room</h1>
+    <p>This page and its APIs require Postie authentication.</p>
+    <p><a href="/postie/diagnostics">System diagnostics</a></p>
+    <h2>Letters</h2>
+    <section id="letters"></section>
+    <h2>Notice moderation</h2>
+    <section id="notices"></section>
+    <p id="result" role="status"></p>
+  </main>
+  <script>
+    const result = document.querySelector('#result');
+    function element(tag, text, className) {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+
+    async function post(url, data) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams(data)
+      });
+      const body = await response.json();
+      result.textContent = body.error || 'Saved.';
+      if (response.ok) await load();
+    }
+
+    function actionButton(label, callback, className) {
+      const button = element('button', label, className);
+      button.onclick = callback;
+      return button;
+    }
+
+    async function load() {
+      const response = await fetch('/api/admin/overview');
+      if (!response.ok) {
+        result.textContent = 'Authentication failed.';
+        return;
+      }
+      const data = await response.json();
+
+      const letters = document.querySelector('#letters');
+      letters.replaceChildren(...data.letters.map(letter => {
+        const card = element('details', undefined, 'card');
+        if (letter.status === 'Waiting') card.open = true;
+        card.append(element('summary', `${letter.tracking} — ${letter.recipient} — ${letter.status}`));
+        const details = element('dl', undefined, 'private');
+        [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
+          .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
+        card.append(details);
+        ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
+          card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
+        return card;
+      }));
+
+      const notices = document.querySelector('#notices');
+      notices.replaceChildren(...data.notices.map(notice => {
+        const card = element('article', undefined, 'card');
+        card.append(
+          element('strong', notice.category),
+          element('p', notice.message),
+          actionButton(notice.hidden ? 'Unhide' : 'Hide', () => post('/api/admin/notices/moderate', {
+            id: notice.id,
+            action: notice.hidden ? 'unhide' : 'hide'
+          }), 'alt'),
+          actionButton('Delete', () => post('/api/admin/notices/moderate', {id: notice.id, action: 'delete'}))
+        );
+        return card;
+      }));
+    }
+
+    load().catch(() => { result.textContent = 'Could not load the sorting room.'; });
+  </script>
+</body>
+</html>

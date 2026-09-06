@@ -1,5 +1,5 @@
-Strawberry Post native tests
-============================
+Strawberry Post tests
+=====================
 
 `native/test_domain` covers the allocation-free domain algorithms shared with
 the firmware. `native/test_storage` uses an in-memory file backend to exercise
@@ -12,3 +12,9 @@ Run only the desktop environment:
 PlatformIO supplies Unity but not a host compiler. GCC/G++ must be available on
 PATH. Hardware network, captive-portal, LittleFS power-cut, and load behavior
 remain outside these suites.
+
+`tools/test_web_preview.py` starts the desktop mock server on an ephemeral port
+and checks the generated web bundle plus public and authenticated HTTP flows.
+Run it with:
+
+    C:\Users\Hughe\.platformio\penv\Scripts\python.exe -m unittest discover -s test\tools -v

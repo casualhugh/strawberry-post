@@ -10,12 +10,12 @@ explicitly deferred and must not be added without a separate decision.
 
 ## Product specification
 
-The public application has three services:
+The public application has two services:
 
-1. **Notice Board** — short-lived categorized public notices.
-2. **Missed Connections** — short-lived public messages to people encountered
-   around the festival.
-3. **Digital Letters** — private messages submitted to the Postie and tracked
+1. **Notice Board** — the landing experience for short-lived public notices.
+   Categories are selected from a fixed list; `Missed Connection` is one of
+   those categories and is suggested to people looking for someone they met.
+2. **Digital Letters** — private messages submitted to the Postie and tracked
    publicly by status only.
 
 The unlinked Postie interface allows an authenticated operator to read private
@@ -50,8 +50,11 @@ emoji before the server applies its byte limit.
 | Record | Fields | Current capacity and limits |
 | --- | --- | --- |
 | Notice | ID, category, message, creation/expiry uptime, boot ID, hidden flag | 32 records; category 32 bytes; message 512 bytes; about 8 hours |
-| Missed connection | ID, title/“to”, message, creation/expiry uptime, boot ID, hidden flag | 32 records; title 96 bytes; message 512 bytes; about 8 hours |
 | Digital letter | ID, tracking code, recipient, likely location, private message, optional sender, creation data, status | 32 records; recipient 160 bytes; location 96 bytes; message 768 bytes; sender 96 bytes |
+
+New notices must use one of: `General`, `Missed Connection`, `Lost & Found`,
+`Event / Schedule`, `Ride Share`, `Help Wanted`, or `For Sale / Swap`. The
+firmware validates the category independently of the browser dropdown.
 
 Letter statuses are:
 
@@ -88,12 +91,11 @@ Phones
         |     +-- protected diagnostics
         |
         +-- program flash (PROGMEM)
-        |     +-- HTML, CSS, and JavaScript
+        |     +-- generated HTML, CSS, and JavaScript bundle
         |
         +-- internal flash (LittleFS)
               +-- system state and boot count
               +-- notice snapshot
-              +-- missed-connection snapshot
               +-- private-letter snapshot
 ```
 
@@ -104,9 +106,14 @@ Important modules:
 - `src/wifi_manager.*` — deterministic SoftAP configuration.
 - `src/dns_server.*` — wildcard local DNS.
 - `src/web_server.*` — server setup, captive routes, and fallback routing.
-- `src/public_ui.*` — shared public styling, homepage, and statistics.
+- `src/public_ui.*` — public asset routes and statistics.
+- `web/` — canonical, human-readable HTML/CSS/JavaScript sources.
+- `tools/generate_web_assets.py` — deterministic PROGMEM bundle generator,
+  invoked automatically by the ESP32 build.
+- `tools/dev_server.py` — standard-library desktop server and in-memory API mock.
+- `src/generated_web_assets.*` — generated firmware asset declarations/data;
+  never edit these files directly.
 - `src/notices.*` — notice model, persistence, routes, and moderation hooks.
-- `src/missed_connections.*` — missed-connection equivalent.
 - `src/letters.*` — private letters, tracking, status, and admin hooks.
 - `src/admin.*` — Basic-authenticated Postie UI and APIs.
 - `src/storage.*` — LittleFS mounting and replacement/recovery helpers.
@@ -125,7 +132,7 @@ this must be characterized on real hardware before considering an async server.
 ## Persistence and the “magic numbers”
 
 LittleFS is mounted on an internal ESP32 flash partition. LittleFS does **not**
-require the application’s `STPS`, `NOTC`, `MISS`, or `LETR` values.
+require the application’s `STPS`, `NOTC`, or `LETR` values.
 
 Those four-character tags are Strawberry Post file-format sentinels. Each
 binary snapshot contains an application magic value and schema version so the
@@ -137,8 +144,11 @@ Current files are:
 
 - `/system.dat` — `STPS`, schema 1
 - `/notices.dat` — `NOTC`, schema 2
-- `/missed.dat` — `MISS`, schema 2
 - `/letters.dat` — `LETR`, schema 1
+
+Early development builds also wrote `/missed.dat`. The current firmware neither
+opens nor deletes that obsolete pre-hardware file; Missed Connection posts now
+use `/notices.dat` like every other notice category.
 
 Files are native fixed C++ binary snapshots. That is compact and bounded, but
 it couples data compatibility to struct layout, capacity, compiler ABI, and
@@ -162,9 +172,9 @@ can retry. Expired records are still filtered from public results during that
 failure. This is deterministic logic, not proof of LittleFS behavior during a
 physical power cut.
 
-Notice and missed-connection stores prune their oldest record when full. A full
-letter store prunes the oldest completed/failed letter; if all 32 letters are
-still active, a new letter is rejected.
+The notice store prunes its oldest record when full. A full letter store prunes
+the oldest completed/failed letter; if all 32 letters are still active, a new
+letter is rejected.
 
 ## Security and privacy model
 
@@ -188,12 +198,10 @@ admin endpoint.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET | `/` | Public homepage and derived summary |
+| GET | `/` | Notice Board landing page, posting form, and derived summary |
 | GET | `/style.css` | Flash-resident public stylesheet |
-| GET | `/notices` | Notice Board page |
+| GET | `/notices` | Compatibility alias for the Notice Board landing page |
 | GET/POST | `/api/notices` | List/create notices |
-| GET | `/missed` | Missed Connections page |
-| GET/POST | `/api/missed` | List/create missed connections |
 | GET | `/letters` | Letter submission and tracking page |
 | POST | `/api/letters` | Create a private letter |
 | GET | `/api/letters/status?tracking=...` | Public status-only tracking |
@@ -203,7 +211,6 @@ admin endpoint.
 | GET | `/api/admin/overview` | Private letters and moderation data |
 | POST | `/api/admin/letters/status` | Change letter status |
 | POST | `/api/admin/notices/moderate` | Hide/unhide/delete a notice |
-| POST | `/api/admin/missed/moderate` | Hide/unhide/delete a missed connection |
 | GET | `/api/admin/diagnostics` | Runtime diagnostic JSON |
 
 ## Build
@@ -231,6 +238,40 @@ C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe device monitor --baud 115
 
 The firmware has compiled successfully, but no claim is made that it has been
 flashed, power-cycle tested, captive-portal tested, or load tested on hardware.
+
+## Desktop browser preview
+
+The files under `web/` are the single source of truth for the browser UI. The
+firmware build regenerates `src/generated_web_assets.*` and embeds the result in
+PROGMEM, so moving the editable source out of C++ does not introduce a runtime
+filesystem read or slow page delivery on the ESP32.
+
+Run the local preview from the repository root:
+
+```powershell
+C:\Users\Hughe\.platformio\penv\Scripts\python.exe tools\dev_server.py
+```
+
+Then open `http://127.0.0.1:8080/`. The Postie preview at `/postie` deliberately
+uses the same development Basic Auth credentials as the firmware:
+
+```text
+username: postie
+password: change-me-postie
+```
+
+The preview implements the categorized Notice Board, letter submission and
+tracking, statistics, authenticated Postie status/moderation, and diagnostics.
+Its seeded records and new submissions live only in RAM and reset whenever the
+server stops. It models HTTP/UI behavior; it does not emulate Wi-Fi, DNS,
+LittleFS, flash timing, expiry across reboot, or power loss.
+
+PlatformIO regenerates assets during the ESP32 build. To regenerate them
+explicitly while editing the UI, run:
+
+```powershell
+C:\Users\Hughe\.platformio\penv\Scripts\python.exe tools\generate_web_assets.py
+```
 
 ## Native tests before hardware
 
@@ -267,7 +308,7 @@ C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
 PlatformIO's `native` platform does not install a compiler. On Windows, install
 a current MinGW-w64 toolchain (for example MSYS2 UCRT64 GCC) and prepend its
 `bin` directory to `PATH`. The development machine uses MSYS2 UCRT64 GCC 16.1.0.
-On 31 August 2026, PlatformIO built and executed both suites successfully: all
+On 6 September 2026, PlatformIO built and executed both suites successfully: all
 23 test functions passed. The ESP32 build also compiles the shared library.
 
 Useful next native cases are full-board pruning, all-active-letter rejection,
@@ -279,16 +320,24 @@ Additional pre-hardware checks:
 
 - Build with `-Wall -Wextra` and fail CI for warnings originating in `src/`.
 - Run `pio check` with an available static analyzer.
-- Serve future separated HTML assets from a desktop server for human browser,
-  accessibility, viewport, and no-network inspection.
-- Validate that HTML refers only to local URLs and that public schemas never
-  include private letter field names.
+- Use the desktop preview for human browser, accessibility, viewport, and
+  no-network inspection.
+- Keep validating that HTML refers only to local URLs and that public schemas
+  never include private letter field names.
 - Add fixture-based size checks so a web bundle or persistent snapshot cannot
   silently exceed its configured budget.
 
 An emulator can help with CPU-only logic, but it should not be treated as proof
 of ESP32 SoftAP, DNS, captive WebView, LittleFS power-loss, SD wiring, flash
 latency, or multiple-phone behavior. Those remain hardware-in-the-loop tests.
+
+The desktop web integration suite verifies generated-asset freshness, local-only
+references, page serving, Postie authentication, public/private letter
+separation, forms, tracking, status changes, moderation, and input errors:
+
+```powershell
+C:\Users\Hughe\.platformio\penv\Scripts\python.exe -m unittest discover -s test\tools -v
+```
 
 ## Removable SD web-asset proposal (not implemented)
 
@@ -357,7 +406,7 @@ separate reviewable commit.
 | 2 | Wildcard DNS and captive-network groundwork | Complete |
 | 3 | LittleFS foundation and persistence proof | Complete |
 | 4 | Persistent Notice Board API, expiry, validation, basic UI | Complete |
-| 5 | Persistent Missed Connections API and basic UI | Complete |
+| 5 | Persistent Missed Connections API and basic UI | Complete historically; later merged into Notice Board categories |
 | 6 | Private Digital Letters and status-only tracking | Complete |
 | 7 | Authenticated Postie workflow and moderation | Complete |
 | 8 | Proper mobile public UI and derived statistics | Complete |

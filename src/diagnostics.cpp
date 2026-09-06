@@ -4,7 +4,6 @@
 
 #include "app_config.h"
 #include "letters.h"
-#include "missed_connections.h"
 #include "notices.h"
 #include "storage.h"
 #include "web_utils.h"
@@ -41,11 +40,10 @@ const char* methodName(HTTPMethod method) {
 void printSummary() {
   Serial.printf(
       "[health] clients=%u requests=%lu heap=%u minHeap=%u notices=%u "
-      "missed=%u letters=%u storage=%u/%u\n",
+      "letters=%u storage=%u/%u\n",
       static_cast<unsigned>(WiFi.softAPgetStationNum()),
       static_cast<unsigned long>(requestCount), ESP.getFreeHeap(),
       ESP.getMinFreeHeap(), static_cast<unsigned>(activeNoticeCount()),
-      static_cast<unsigned>(activeMissedConnectionCount()),
       static_cast<unsigned>(letterCount()),
       static_cast<unsigned>(storageUsedBytes()),
       static_cast<unsigned>(storageTotalBytes()));
@@ -115,10 +113,6 @@ void sendDiagnosticsJson(WebServer& server) {
   response += activeNoticeCount();
   response += F(",\"storedNotices\":");
   response += storedNoticeCount();
-  response += F(",\"activeMissedConnections\":");
-  response += activeMissedConnectionCount();
-  response += F(",\"storedMissedConnections\":");
-  response += storedMissedConnectionCount();
   response += F(",\"letters\":");
   response += letterCount();
   response += F(",\"lettersWaiting\":");

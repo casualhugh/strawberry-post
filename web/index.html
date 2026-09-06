@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Notice Board | Strawberry Post</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <h1>Strawberry Post</h1>
+    <p>Community notices and local letters, available here without internet.</p>
+
+    <section class="board-heading">
+      <div>
+        <h2>Notice Board</h2>
+        <p>See what people nearby have shared.</p>
+      </div>
+      <a class="letter-link" href="/letters">Send or track a letter</a>
+    </section>
+
+    <section id="posts" aria-label="Current notices">
+      <p class="hint">Loading notices&hellip;</p>
+    </section>
+
+    <section class="post-form" aria-labelledby="post-heading">
+      <h2 id="post-heading">Pin a notice</h2>
+      <form id="notice-form">
+        <label>Category
+          <select name="category" required>
+            <option value="" selected disabled>Choose a category</option>
+            <option>General</option>
+            <option>Missed Connection</option>
+            <option>Lost &amp; Found</option>
+            <option>Event / Schedule</option>
+            <option>Ride Share</option>
+            <option>Help Wanted</option>
+            <option>For Sale / Swap</option>
+          </select>
+        </label>
+        <p class="hint">Looking for someone you met? Choose &ldquo;Missed Connection&rdquo;.</p>
+        <label>Message
+          <textarea name="message" maxlength="512" required></textarea>
+        </label>
+        <button type="submit">Pin notice</button>
+      </form>
+      <p id="result" role="status"></p>
+    </section>
+
+    <p id="delivery-status" class="status" aria-live="polite">Loading delivery status&hellip;</p>
+    <section class="stats" aria-label="Postal statistics">
+      <div class="stat"><strong id="notices-active">&ndash;</strong>active notices</div>
+      <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
+      <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
+    </section>
+    <p class="hint">Connected to STRAWBERRY POST &mdash; no internet needed.</p>
+  </main>
+  <script>
+    const posts = document.querySelector('#posts');
+    const form = document.querySelector('#notice-form');
+    const result = document.querySelector('#result');
+    const text = (id, value) => { document.querySelector(id).textContent = value; };
+
+    function element(tag, value) {
+      const node = document.createElement(tag);
+      node.textContent = value;
+      return node;
+    }
+
+    async function loadNotices() {
+      const response = await fetch('/api/notices');
+      const data = await response.json();
+      if (!data.notices.length) {
+        posts.replaceChildren(element('p', 'No notices yet. Be the first to pin one.'));
+        return;
+      }
+      posts.replaceChildren(...data.notices.map(notice => {
+        const article = document.createElement('article');
+        article.className = 'post';
+        article.append(element('strong', notice.category), element('p', notice.message));
+        return article;
+      }));
+    }
+
+    async function loadStats() {
+      const response = await fetch('/api/stats');
+      const stats = await response.json();
+      const out = stats.lettersOutForDelivery;
+      text('#delivery-status', `${out} ${out === 1 ? 'letter' : 'letters'} currently out for delivery`);
+      text('#letters-waiting', stats.lettersWaiting);
+      text('#letters-delivered', stats.lettersDelivered);
+      text('#notices-active', stats.noticesActive);
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      result.textContent = 'Pinning notice...';
+      const response = await fetch('/api/notices', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams(new FormData(form))
+      });
+      const data = await response.json();
+      result.textContent = response.ok ? 'Your notice is now on the board.' : data.error;
+      if (response.ok) {
+        form.reset();
+        await Promise.all([loadNotices(), loadStats()]);
+      }
+    });
+
+    Promise.all([loadNotices(), loadStats()]).catch(() => {
+      result.textContent = 'The board is temporarily unavailable.';
+    });
+  </script>
+</body>
+</html>

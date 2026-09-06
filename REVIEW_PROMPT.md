@@ -40,9 +40,9 @@ is no internet, cloud account, upstream router, external asset, or CDN.
 
 Public features:
 
-1. Notice Board
-2. Missed Connections
-3. Digital Letters
+1. Notice Board, which is the landing page and includes a fixed category list;
+   `Missed Connection` is a suggested category rather than a separate feature
+2. Digital Letters
 
 An unlinked, authenticated Postie interface reads private letters, changes
 their status, and moderates public content.
@@ -66,11 +66,10 @@ Network goals:
 UI goals: mobile-first, readable outdoors, lightweight, and styled as a small
 Australian rural postal service using red, cream, paper, and cork tones.
 
-Notice records require stable IDs, category, message, creation/expiry data, and
-moderation state. Missed Connections require ID, title/“to”, message,
-creation/expiry, and moderation state. They default to about eight hours. No
-NTP/RTC can be assumed, so uptime expiry is acceptable if its limitations are
-explicit and future time improvement remains possible.
+Notice records require stable IDs, a server-validated category, message,
+creation/expiry data, and moderation state. They default to about eight hours.
+No NTP/RTC can be assumed, so uptime expiry is acceptable if its limitations
+are explicit and future time improvement remains possible.
 
 Digital Letters require ID, human-friendly tracking code, recipient, likely
 location, private message, optional sender, creation data, and one status:
@@ -85,7 +84,7 @@ Letter contents must never appear publicly. The sender receives a tracking code
 after submission. Public tracking may return only tracking code and status.
 
 Statistics should be derived automatically: submitted/waiting/delivered
-letters, active/total notices, and active/total missed connections.
+letters and active/total notices.
 
 The trust model is an informal offline festival installation, not a hardened
 internet service. Nevertheless, authenticate every admin route, centralize
@@ -94,11 +93,14 @@ and oversized requests safely, encode user content correctly, tolerate repeated
 taps, and support valid emoji. Expect nonsense, empty values, very long values,
 malformed bytes, and users trying unintended inputs.
 
-Current web assets intentionally live in `PROGMEM` so the site shell survives a
-data-filesystem failure. A proposed future option is a laptop-editable FAT32 SD
-web bundle loaded and validated at boot into PSRAM, with the embedded bundle as
-fallback. That SD feature is not implemented and must not be confused with
-LittleFS, which remains the internal persistent-data store.
+Canonical web assets live under `web/`. A deterministic pre-build generator
+produces `src/generated_web_assets.*`, and the firmware serves that generated
+bundle from `PROGMEM` so the site shell survives a data-filesystem failure. A
+standard-library desktop server serves the canonical files with in-memory mock
+APIs. A proposed future option is a laptop-editable FAT32 SD web bundle loaded
+and validated at boot into PSRAM, with the embedded bundle as fallback. That SD
+feature is not implemented and must not be confused with LittleFS, which remains
+the internal persistent-data store.
 
 ## Stage contract
 
@@ -115,8 +117,12 @@ separately authorized.
   helpers, and a reboot-surviving persistence proof.
 - **Stage 4 — Notice Board:** persistent `GET/POST /api/notices`, required
   category/message, validation, capacity, expiry, and basic UI.
-- **Stage 5 — Missed Connections:** persistent `GET/POST /api/missed`, expiry,
-  validation, capacity, and basic UI.
+- **Stage 5 — Missed Connections:** originally implemented as a separate
+  persistent feature, then deliberately folded into the Notice Board as the
+  `Missed Connection` category. The obsolete store, API, page, and moderation
+  route should be absent from the current product. An old `/missed.dat` file is
+  intentionally ignored rather than migrated because hardware deployment has
+  not begun.
 - **Stage 6 — Digital Letters:** persistent `POST /api/letters`, unique friendly
   tracking codes, and public status-only lookup.
 - **Stage 7 — Postie/Admin:** authenticated private letter workflow, all status
@@ -145,17 +151,18 @@ titles.
   range control.
 - Arduino `WebServer` is synchronous by design; require evidence before asking
   for an async rewrite.
-- HTML/CSS/JS are in `PROGMEM` for reliability.
+- HTML/CSS/JS have human-readable canonical sources and generated PROGMEM
+  firmware copies; generated files must exactly match their inputs.
 - Public expiry uses `millis()`, and current reboot behavior grants a new full
   eight-hour window.
 - Persistent data is stored as bounded native binary snapshots with
   application magic/version fields and `.tmp`/`.bak` replacement.
-- `STPS`, `NOTC`, `MISS`, and `LETR` are application file signatures, not
+- `STPS`, `NOTC`, and `LETR` are application file signatures, not
   LittleFS requirements.
 - LittleFS auto-format is restricted to storage that appears blank.
 - Duplicate suppression remembers one recent payload hash per feature for five
   seconds; it is not rate limiting.
-- Notice/Missed capacity prunes oldest. Letter capacity prunes a completed or
+- Notice capacity prunes oldest. Letter capacity prunes a completed or
   failed record; all-active capacity rejects new letters.
 - Four-digit tracking codes are friendly identifiers, not secrets.
 - Hardware, captive behavior, power-loss recovery, endurance, and multi-phone
@@ -172,9 +179,9 @@ titles.
 - Flag unexplained numeric constants. Do not call protocol constants (ports,
   UTF-8 boundaries, FNV constants, erased-flash byte) arbitrary without first
   checking their standard meaning.
-- Assess module boundaries, duplicate Notice/Missed logic, giant embedded
-  strings, naming, error semantics, API discoverability, and whether a human can
-  safely change one feature without violating another.
+- Assess module boundaries, obsolete pre-merge Missed Connections code,
+  generated strings, naming, error semantics, API discoverability, and whether
+  a human can safely change one feature without violating another.
 - Review `README.md` for accuracy against code and identify stale or misleading
   documentation.
 
@@ -276,6 +283,9 @@ titles.
   implementations and whether the fake clock, memory file store, corruption,
   and failure injection model the claimed branches. Do not report them as
   executed unless a native runner actually completed them.
+- Run the Python desktop integration suite under `test/tools/`; review generated
+  asset freshness, local-only references, mock/firmware API drift, authentication,
+  and public/private data separation. Treat the mock as UI/API evidence only.
 - Confirm there is still no hardware, captive, real LittleFS power-cut, soak,
   or multi-phone test evidence.
 - Evaluate—not implement—the SD asset proposal. LittleFS should remain internal

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Digital Letters | Strawberry Post</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <a class="back" href="/">&larr; Strawberry Post</a>
+    <h1>Send a Digital Letter</h1>
+    <p class="hint">Only the Postie can read your message. Keep the tracking code shown after sending.</p>
+    <form id="send">
+      <label>Who is it for?<input name="recipient" maxlength="120" required></label>
+      <label>Where might we find them?<input name="location" maxlength="80" required></label>
+      <label>Your message<textarea name="message" maxlength="500" required></textarea></label>
+      <label>Your name (optional)<input name="sender" maxlength="80"></label>
+      <button>Send to the Postie</button>
+    </form>
+    <p id="result" class="ticket" role="status" hidden></p>
+    <h2>Track a letter</h2>
+    <form id="track">
+      <label>Tracking code<input name="tracking" maxlength="10" placeholder="STRAW-0427" required></label>
+      <button>Check status</button>
+    </form>
+    <p id="status" role="status"></p>
+  </main>
+  <script>
+    const send = document.querySelector('#send');
+    const result = document.querySelector('#result');
+    const track = document.querySelector('#track');
+    const status = document.querySelector('#status');
+
+    send.addEventListener('submit', async event => {
+      event.preventDefault();
+      const response = await fetch('/api/letters', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams(new FormData(send))
+      });
+      const data = await response.json();
+      result.hidden = false;
+      result.textContent = data.error || `Keep this tracking code: ${data.tracking}`;
+      if (response.ok) send.reset();
+    });
+
+    track.addEventListener('submit', async event => {
+      event.preventDefault();
+      const code = new FormData(track).get('tracking');
+      const response = await fetch(`/api/letters/status?tracking=${encodeURIComponent(code)}`);
+      const data = await response.json();
+      status.textContent = data.error || `${data.tracking}: ${data.status}`;
+    });
+  </script>
+</body>
+</html>

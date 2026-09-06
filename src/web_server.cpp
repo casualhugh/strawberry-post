@@ -7,7 +7,6 @@
 #include "app_config.h"
 #include "diagnostics.h"
 #include "letters.h"
-#include "missed_connections.h"
 #include "notices.h"
 #include "public_ui.h"
 
@@ -34,7 +33,6 @@ void startWebServer() {
   server.on("/", HTTP_GET, handleHome);
   registerPublicUiRoutes(server);
   registerNoticeRoutes(server);
-  registerMissedConnectionRoutes(server);
   registerLetterRoutes(server);
   registerAdminRoutes(server);
 

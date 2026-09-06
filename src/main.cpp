@@ -3,7 +3,6 @@
 #include "dns_server.h"
 #include "diagnostics.h"
 #include "letters.h"
-#include "missed_connections.h"
 #include "notices.h"
 #include "storage.h"
 #include "web_server.h"
@@ -23,7 +22,6 @@ void setup() {
   // HTTP remains usable at the AP address if DNS cannot be started.
   startStorage();
   startNotices();
-  startMissedConnections();
   startLetters();
   startDnsServer();
   startWebServer();

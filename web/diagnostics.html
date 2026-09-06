@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Diagnostics | Strawberry Post</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="admin">
+  <main>
+    <p><a href="/postie">&larr; Sorting Room</a></p>
+    <h1>System diagnostics</h1>
+    <dl id="data" class="diagnostics"></dl>
+    <p>Refresh this page while testing with multiple phones.</p>
+    <p id="result" role="status"></p>
+  </main>
+  <script>
+    fetch('/api/admin/diagnostics')
+      .then(response => response.json())
+      .then(data => {
+        const list = document.querySelector('#data');
+        Object.entries(data).forEach(([key, value]) => {
+          const term = document.createElement('dt');
+          const description = document.createElement('dd');
+          term.textContent = key;
+          description.textContent = value;
+          list.append(term, description);
+        });
+      })
+      .catch(() => { document.querySelector('#result').textContent = 'Could not load diagnostics.'; });
+  </script>
+</body>
+</html>

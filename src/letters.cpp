@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "diagnostics.h"
+#include "generated_web_assets.h"
 #include "storage.h"
 #include "storage_format.h"
 #include "strawberry_core.h"
@@ -31,18 +32,6 @@ bool loaded = false;
 uint32_t lastSubmissionHash = 0;
 uint32_t lastSubmissionAtMs = 0;
 char lastSubmissionTracking[AppConfig::kTrackingCodeMaxBytes + 1] = {};
-
-constexpr char kLettersPage[] PROGMEM = R"HTML(
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Digital Letters | Strawberry Post</title><link rel="stylesheet" href="/style.css"></head><body><main><a class="back" href="/">&larr; Strawberry Post</a><h1>Send a Digital Letter</h1><p class="hint">Only the Postie can read your message. Keep the tracking code shown after sending.</p>
-<form id="send"><label>Who is it for?<input name="recipient" maxlength="120" required></label><label>Where might we find them?<input name="location" maxlength="80" required></label>
-<label>Your message<textarea name="message" maxlength="500" required></textarea></label><label>Your name (optional)<input name="sender" maxlength="80"></label><button>Send to the Postie</button></form>
-<p id="result" class="ticket" role="status" hidden></p><h2>Track a letter</h2><form id="track"><label>Tracking code<input name="tracking" maxlength="10" placeholder="STRAW-0427" required></label><button>Check status</button></form><p id="status" role="status"></p><script>
-const send=document.querySelector('#send'),result=document.querySelector('#result'),track=document.querySelector('#track'),status=document.querySelector('#status');
-send.addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/letters',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(send))});const data=await r.json();result.hidden=false;result.textContent=data.error||`Keep this tracking code: ${data.tracking}`;if(r.ok)send.reset()});
-track.addEventListener('submit',async e=>{e.preventDefault();const code=new FormData(track).get('tracking');const r=await fetch('/api/letters/status?tracking='+encodeURIComponent(code));const data=await r.json();status.textContent=data.error||`${data.tracking}: ${data.status}`});
-</script></main></body></html>
-)HTML";
 
 bool persist() {
   // Letter records are private. Never serialize stale data from inactive slots
@@ -310,7 +299,7 @@ bool startLetters() {
 void registerLetterRoutes(WebServer& server) {
   server.on("/letters", HTTP_GET, [&server]() {
     recordHttpRequest(server);
-    server.send_P(200, "text/html; charset=utf-8", kLettersPage);
+    server.send_P(200, "text/html; charset=utf-8", WebAssets::kLettersPage);
   });
   server.on("/api/letters", HTTP_POST, [&server]() { handleCreate(server); });
   server.on("/api/letters/status", HTTP_GET,

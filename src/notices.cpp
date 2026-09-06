@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "diagnostics.h"
+#include "generated_web_assets.h"
 #include "storage.h"
 #include "storage_format.h"
 #include "strawberry_core.h"
@@ -13,6 +14,14 @@ namespace {
 constexpr char kNoticesPath[] = "/notices.dat";
 constexpr uint32_t kNoticesMagic = makeStorageMagic('N', 'O', 'T', 'C');
 constexpr uint16_t kNoticesVersion = 2;
+// Keep this list in sync with the category dropdown in web/index.html. The
+// server validates it too so clients cannot create unexpected categories by
+// bypassing the browser form.
+constexpr const char* kAllowedCategories[] = {
+    "General",          "Missed Connection", "Lost & Found",
+    "Event / Schedule", "Ride Share",        "Help Wanted",
+    "For Sale / Swap",
+};
 
 struct NoticeStore {
   uint32_t magic;
@@ -29,21 +38,17 @@ uint32_t lastSubmissionHash = 0;
 uint32_t lastSubmissionAtMs = 0;
 uint32_t lastSubmissionId = 0;
 
-constexpr char kNoticePage[] PROGMEM = R"HTML(
-<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Notice Board | Strawberry Post</title><link rel="stylesheet" href="/style.css"></head><body><main><a class="back" href="/">&larr; Strawberry Post</a><h1>Notice Board</h1><p class="hint">Notices stay up for about eight hours.</p>
-<form id="form"><label>Category<input name="category" maxlength="32" required></label>
-<label>Message<textarea name="message" maxlength="280" required></textarea></label><button>Pin notice</button></form>
-<p id="result" role="status"></p><section id="posts"></section><script>
-const form=document.querySelector('#form'),result=document.querySelector('#result'),posts=document.querySelector('#posts');
-async function load(){const r=await fetch('/api/notices');const data=await r.json();posts.replaceChildren(...data.notices.map(n=>{const article=document.createElement('article');article.className='post';const strong=document.createElement('strong');strong.textContent=n.category;const p=document.createElement('p');p.textContent=n.message;article.append(strong,p);return article}))}
-form.addEventListener('submit',async e=>{e.preventDefault();result.textContent='Posting...';const r=await fetch('/api/notices',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form))});const data=await r.json();result.textContent=data.error||'Notice pinned.';if(r.ok){form.reset();load()}});load();
-</script></main></body></html>
-)HTML";
-
 bool expired(const NoticeRecord& notice, uint32_t now) {
   return StrawberryCore::deadlineReached(now, notice.expiresAtMs);
+}
+
+bool allowedCategory(const String& category) {
+  for (const char* allowed : kAllowedCategories) {
+    if (category == allowed) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool persist() {
@@ -163,6 +168,10 @@ void handleCreate(WebServer& server) {
     sendError(server, 400, F("Notice contains invalid text"));
     return;
   }
+  if (!allowedCategory(category)) {
+    sendError(server, 400, F("Choose a valid notice category"));
+    return;
+  }
   if (category.length() > AppConfig::kNoticeCategoryMaxBytes ||
       message.length() > AppConfig::kNoticeMessageMaxBytes) {
     sendError(server, 413, F("Notice is too long"));
@@ -264,7 +273,8 @@ void registerNoticeRoutes(WebServer& server) {
   server.on("/notices", HTTP_GET,
             [&server]() {
               recordHttpRequest(server);
-              server.send_P(200, "text/html; charset=utf-8", kNoticePage);
+              server.send_P(200, "text/html; charset=utf-8",
+                            WebAssets::kHomePage);
             });
   server.on("/api/notices", HTTP_GET, [&server]() { handleList(server); });
   server.on("/api/notices", HTTP_POST, [&server]() { handleCreate(server); });

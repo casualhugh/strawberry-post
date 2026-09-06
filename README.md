@@ -8,6 +8,10 @@ account, or upstream router is required.
 The project currently implements Stages 0–10 below. Display hardware is
 explicitly deferred and must not be added without a separate decision.
 
+The selected CrowPanel display and its supplied GPIO assignments are recorded
+in [`HARDWARE.md`](HARDWARE.md). That document is a static wiring reference;
+display and input drivers remain deferred.
+
 ## Product specification
 
 The public application has two services:

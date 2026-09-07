@@ -41,5 +41,9 @@ constexpr bool kSerialRequestLogging = true;
 // yield in the main loop so Wi-Fi/RTOS background work is not starved.
 constexpr uint32_t kSerialStartupSettleMs = 250;
 constexpr uint32_t kMainLoopYieldMs = 2;
+// E-paper values are intentionally centralized for hardware tuning. The busy
+// timeout prevents a disconnected or failed panel from blocking the website.
+constexpr uint32_t kEpaperRotationIntervalMs = 30000;
+constexpr uint8_t kEpaperFullRefreshInterval = 10;
 
 }  // namespace AppConfig

@@ -3,7 +3,8 @@ Strawberry Post tests
 
 `native/test_domain` covers the allocation-free domain algorithms shared with
 the firmware. `native/test_storage` uses an in-memory file backend to exercise
-validated recovery and deterministic atomic-write failure points.
+storage recovery and atomic replacement. `native/test_epaper` covers display
+text sanitising, line wrapping, notice rotation, hashing, and refresh policy.
 
 Run only the desktop environment:
 

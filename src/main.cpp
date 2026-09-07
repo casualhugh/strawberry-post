@@ -2,6 +2,7 @@
 
 #include "dns_server.h"
 #include "diagnostics.h"
+#include "epaper_display.h"
 #include "letters.h"
 #include "notices.h"
 #include "storage.h"
@@ -25,6 +26,8 @@ void setup() {
   startLetters();
   startDnsServer();
   startWebServer();
+  // Display failure is deliberately non-fatal. Postal services remain usable.
+  startEpaperDisplay();
   Serial.println("Strawberry Post is ready.");
 }
 
@@ -32,5 +35,6 @@ void loop() {
   handleDnsRequests();
   handleWebRequests();
   handlePeriodicDiagnostics();
+  handleEpaperDisplay();
   delay(AppConfig::kMainLoopYieldMs);
 }

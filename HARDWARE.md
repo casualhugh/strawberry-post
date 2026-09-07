@@ -105,10 +105,10 @@ CrowPanel 5.79-inch E-Paper (272 × 792)
 ## Integration status
 
 The PlatformIO target now matches the installed ESP32-S3 module and memory.
-Display, input, and TF-card drivers are not yet implemented. Their electrical
-behavior, including button polarity/pull-ups, safe SPI speeds, display
-waveforms/LUTs, refresh behavior, and shutdown sequencing, must be verified
-against the exact purchased board revision before those drivers are enabled.
+The e-paper driver is implemented from Elecrow's matching dual-SSD1683 example,
+including its software SPI pins and GPIO 7 power enable. Its orientation,
+refresh timing, ghosting, and shutdown sequencing still require verification on
+the physical panel. Input and TF-card drivers are not yet implemented.
 
 ## Hardware references
 

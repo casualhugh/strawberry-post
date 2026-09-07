@@ -318,6 +318,19 @@ const NoticeRecord* noticeAt(size_t index) {
   return nullptr;
 }
 
+const NoticeRecord* activeNoticeAt(size_t index) {
+  removeExpired();
+  const uint32_t now = millis();
+  size_t current = 0;
+  for (size_t storedIndex = 0; storedIndex < store.count; ++storedIndex) {
+    const NoticeRecord& notice = store.records[storedIndex];
+    if (notice.hidden || expired(notice, now)) continue;
+    if (current == index) return &notice;
+    ++current;
+  }
+  return nullptr;
+}
+
 bool setNoticeHidden(uint32_t id, bool hidden) {
   for (size_t index = 0; index < store.count; ++index) {
     if (store.records[index].id == id) {

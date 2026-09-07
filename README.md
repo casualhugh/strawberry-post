@@ -294,7 +294,7 @@ C:\Users\Hughe\.platformio\penv\Scripts\python.exe tools\generate_web_assets.py
 
 ## Native tests before hardware
 
-The repository now has two PlatformIO/Unity desktop suites containing 23 test
+The repository now has three PlatformIO/Unity desktop suites containing 29 test
 functions under `test/native/`. Production firmware calls the same
 platform-neutral implementations; the tests do not carry a second copy of the
 algorithms. Explicit `nowMs` arguments provide a fake-clock seam, while an
@@ -316,6 +316,9 @@ Current automated coverage includes:
 - atomic replacement success plus failures while writing, removing a stale
   backup, renaming the primary, promoting the temporary, and restoring backup;
 - preservation of a readable recovery copy when only a backup exists.
+- bounded display-font sanitising and fixed-column word wrapping;
+- notice rotation, snapshot hashing, unchanged-frame skipping, and periodic
+  clean-refresh decisions.
 
 Run the suites with a host GCC/G++ compiler available on `PATH`:
 
@@ -327,8 +330,8 @@ C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
 PlatformIO's `native` platform does not install a compiler. On Windows, install
 a current MinGW-w64 toolchain (for example MSYS2 UCRT64 GCC) and prepend its
 `bin` directory to `PATH`. The development machine uses MSYS2 UCRT64 GCC 16.1.0.
-On 6 September 2026, PlatformIO built and executed both suites successfully: all
-23 test functions passed. The ESP32 build also compiles the shared library.
+On 7 September 2026, PlatformIO built and executed all three suites successfully: all
+29 test functions passed. The ESP32 build also compiles the shared libraries.
 
 Useful next native cases are full-board pruning, all-active-letter rejection,
 exact payload comparison after the 32-bit hash prefilter, JSON escaping,
@@ -430,16 +433,19 @@ separate reviewable commit.
 | 8 | Proper mobile public UI and derived statistics | Complete |
 | 9 | Reliability, limits, encoding, pruning, duplicate handling | Complete; hardware verification pending |
 | 10 | Runtime diagnostics and multi-phone test preparation | Complete; load test pending |
-| 11 | E-ink/display integration | Design approved; driver implementation pending |
+| 11 | E-ink/display integration | Implemented; physical-panel verification pending |
 
-No display-driver code or dependency is present yet. The approved layout,
-rotation behaviour, font constraints, and initial refresh policy are specified
-in `EPAPER_DISPLAY.md`.
+The display module now renders the approved layout from in-memory notices and
+letter counts, rotates every 30 seconds, skips identical frames, periodically
+performs a clean refresh, and disables itself safely after a panel timeout.
+The exact Elecrow dual-SSD1683 driver and fonts are vendored in
+`lib/crowpanel_epaper`. See `EPAPER_DISPLAY.md` for design and verification
+details.
 
 ## Recommended next work
 
-1. Implement Stage 11 behind a small display abstraction, including a native
-   framebuffer renderer test that does not require hardware.
+1. Verify Stage 11 orientation, refresh modes, timing, and ghosting on the
+   physical CrowPanel.
 2. Add the native, web-preview, generated-asset, and ESP32 build checks to CI.
 3. Extend the domain seam to cover full-store pruning, exact duplicate payload
    comparison, statistics, and complete mutation rollback.

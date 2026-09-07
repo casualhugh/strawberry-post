@@ -206,6 +206,32 @@ def render_screen(font_source: str, logo_path: Path) -> Image.Image:
     return image
 
 
+def write_cpp_logo(image: Image.Image, output: Path) -> None:
+    values: list[int] = []
+    bytes_per_row = (image.width + 7) // 8
+    for y in range(image.height):
+        for byte_index in range(bytes_per_row):
+            value = 0
+            for bit in range(8):
+                x = byte_index * 8 + bit
+                if x < image.width and image.getpixel((x, y)) == 0:
+                    value |= 0x80 >> bit
+            values.append(value)
+    rows = [
+        "    " + ", ".join(f"0x{value:02x}" for value in values[index:index + 12])
+        for index in range(0, len(values), 12)
+    ]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        "#pragma once\n\n#include <stdint.h>\n\n"
+        "// Generated from web/logo.svg at 34 by 43 pixels. Each row is padded "
+        "to 40 bits.\nconstexpr uint8_t kEpaperLogo34x43[] = {\n"
+        + ",\n".join(rows)
+        + "\n};\n",
+        encoding="utf-8",
+    )
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -215,6 +241,11 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--logo", type=Path, default=DEFAULT_LOGO)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--cpp-logo-output",
+        type=Path,
+        help="Also regenerate the packed 34 by 43 C++ logo header",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -226,6 +257,9 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> int:
     arguments = parse_arguments()
     image = render_screen(read_font_header(arguments.font_header), arguments.logo)
+    if arguments.cpp_logo_output:
+        write_cpp_logo(logo_bitmap(arguments.logo, 34, 43),
+                       arguments.cpp_logo_output)
     if arguments.check:
         if not arguments.output.exists():
             raise RuntimeError(f"Expected mockup does not exist: {arguments.output}")

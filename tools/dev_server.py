@@ -165,7 +165,7 @@ class MockState:
                     "category": item["category"],
                     "message": item["message"],
                     "createdUptimeSeconds": 0,
-                    "expiresInSeconds": 8 * 60 * 60,
+                    "expiresInSeconds": 48 * 60 * 60,
                 }
                 for item in self.notices
                 if not item["hidden"]
@@ -450,9 +450,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
             location = form.get("location", "").strip()
             message = form.get("message", "").strip()
             sender = form.get("sender", "").strip()
-            if not recipient or not location or not message:
+            if not recipient or not message:
                 self.send_error_json(
-                    HTTPStatus.BAD_REQUEST, "Recipient, location and message are required"
+                    HTTPStatus.BAD_REQUEST, "Recipient and message are required"
                 )
             elif not all(
                 (

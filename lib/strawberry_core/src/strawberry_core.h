@@ -6,7 +6,7 @@
 namespace StrawberryCore {
 
 // Wrap-safe while deadlines are scheduled less than 2^31 milliseconds away.
-// Strawberry Post's eight-hour lifetime is well inside that half-range.
+// Strawberry Post's 48-hour lifetime is well inside that half-range.
 bool deadlineReached(uint32_t nowMs, uint32_t deadlineMs);
 
 bool validUserText(const char* bytes, size_t length, bool allowNewlines);

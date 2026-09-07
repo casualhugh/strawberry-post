@@ -13,7 +13,7 @@
       <div class="brand-copy">
         <p class="eyebrow">Strawberry Fields &bull; NSW &#8596; VIC</p>
         <h1>Strawberry Post</h1>
-        <p>Welcome to Strawberry Post Office.</p>
+        <p>A tiny post office for festival-sized problems.</p>
       </div>
     </header>
 
@@ -23,10 +23,10 @@
       <div>
         <p class="section-kicker">The festival wire</p>
         <h2>Notice Board</h2>
-        <p>The festival grapevine, now with fewer rumours and more readable handwriting.</p>
+        <p id="grapevine-line">The festival grapevine, now with fewer rumours and more readable handwriting.</p>
       </div>
       <div class="letter-actions">
-        <a class="letter-link" href="/letters">Send a letter</a>
+        <a class="letter-link" href="/letters">Send a stranger a letter</a>
         <a class="letter-link letter-link-secondary" href="/track">Track a letter</a>
       </div>
     </section>
@@ -38,7 +38,7 @@
     <section class="post-form" aria-labelledby="post-heading">
       <p class="section-kicker">Add to the board</p>
       <h2 id="post-heading">Pin a notice</h2>
-      <p>Pin something useful, weird or urgently needed. Keep it vague enough for a stranger to recognise.</p>
+      <p>Pin something useful, weird or urgently needed. Public notices disappear after 48 hours.</p>
       <form id="notice-form">
         <label>Category
           <select name="category" required>
@@ -67,7 +67,7 @@
         <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
         <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
       </section>
-      <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+      <p class="connection-note">Connected to the festival, not the internet.</p>
     </footer>
   </main>
   <script>
@@ -75,6 +75,15 @@
     const form = document.querySelector('#notice-form');
     const result = document.querySelector('#result');
     const text = (id, value) => { document.querySelector(id).textContent = value; };
+    const grapevineJokes = [
+      'fewer rumours and more readable handwriting',
+      'less gossip and more useful nonsense',
+      'all the news fit to pin',
+      'fresh gossip, pinned fresh',
+      'more local knowledge, fewer crossed wires'
+    ];
+    document.querySelector('#grapevine-line').textContent =
+      `The festival grapevine, now with ${grapevineJokes[Math.floor(Math.random() * grapevineJokes.length)]}.`;
 
     function element(tag, value) {
       const node = document.createElement(tag);

@@ -136,8 +136,8 @@ void handleCreate(WebServer& server) {
   location.trim();
   message.trim();
   sender.trim();
-  if (recipient.isEmpty() || location.isEmpty() || message.isEmpty()) {
-    sendError(server, 400, F("Recipient, location and message are required"));
+  if (recipient.isEmpty() || message.isEmpty()) {
+    sendError(server, 400, F("Recipient and message are required"));
     return;
   }
   if (!validUserText(recipient, false) || !validUserText(location, false) ||

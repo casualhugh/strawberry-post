@@ -18,7 +18,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <div class="brand-copy">
         <p class="eyebrow">Strawberry Fields &bull; NSW &#8596; VIC</p>
         <h1>Strawberry Post</h1>
-        <p>Welcome to Strawberry Post Office.</p>
+        <p>A tiny post office for festival-sized problems.</p>
       </div>
     </header>
 
@@ -28,10 +28,10 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <div>
         <p class="section-kicker">The festival wire</p>
         <h2>Notice Board</h2>
-        <p>The festival grapevine, now with fewer rumours and more readable handwriting.</p>
+        <p id="grapevine-line">The festival grapevine, now with fewer rumours and more readable handwriting.</p>
       </div>
       <div class="letter-actions">
-        <a class="letter-link" href="/letters">Send a letter</a>
+        <a class="letter-link" href="/letters">Send a stranger a letter</a>
         <a class="letter-link letter-link-secondary" href="/track">Track a letter</a>
       </div>
     </section>
@@ -43,7 +43,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
     <section class="post-form" aria-labelledby="post-heading">
       <p class="section-kicker">Add to the board</p>
       <h2 id="post-heading">Pin a notice</h2>
-      <p>Pin something useful, weird or urgently needed. Keep it vague enough for a stranger to recognise.</p>
+      <p>Pin something useful, weird or urgently needed. Public notices disappear after 48 hours.</p>
       <form id="notice-form">
         <label>Category
           <select name="category" required>
@@ -72,7 +72,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
         <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
         <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
       </section>
-      <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+      <p class="connection-note">Connected to the festival, not the internet.</p>
     </footer>
   </main>
   <script>
@@ -80,6 +80,15 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
     const form = document.querySelector('#notice-form');
     const result = document.querySelector('#result');
     const text = (id, value) => { document.querySelector(id).textContent = value; };
+    const grapevineJokes = [
+      'fewer rumours and more readable handwriting',
+      'less gossip and more useful nonsense',
+      'all the news fit to pin',
+      'fresh gossip, pinned fresh',
+      'more local knowledge, fewer crossed wires'
+    ];
+    document.querySelector('#grapevine-line').textContent =
+      `The festival grapevine, now with ${grapevineJokes[Math.floor(Math.random() * grapevineJokes.length)]}.`;
 
     function element(tag, value) {
       const node = document.createElement(tag);
@@ -153,7 +162,7 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <div class="brand-copy">
         <p class="eyebrow">Strawberry Fields &bull; Festival post</p>
         <h1>Send a Letter</h1>
-        <p>Private mail carried by the Postie, who has been briefed and appears reasonably trustworthy.</p>
+        <p>Send a private letter to a stranger.</p>
       </div>
     </header>
 
@@ -167,31 +176,34 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <div class="postcard-top">
         <div>
           <h2 id="send-heading">Write your letter</h2>
-          <p class="hint">Only the Postie can read it. Keep the tracking number shown after sending.</p>
+          <p class="hint">Not public. The Postie reads it to deliver it. Keep your tracking number.</p>
         </div>
         <div class="postcard-stamp" aria-hidden="true">
           <img src="/logo.svg?v=8" alt="" width="30" height="38">
           <span>Strawberry Post</span>
         </div>
       </div>
+      <p class="letter-explainer">Pick a type of stranger. Write them something fun. We&rsquo;ll try to find them.</p>
       <form id="send" class="postcard-form">
         <div class="postcard-address">
           <label>Who should the Postie look for?
-            <span class="field-help" id="recipient-help">Keep it vague but recognisable. The Postie will hand it to the first stranger they meet who fits. Try an outfit, campsite or doof stick. It is not for a specific person. Give us enough detail to find a stranger, not enough to accidentally summon your ex.</span>
+            <span class="field-help" id="recipient-help">The Postie will try the first stranger they meet who fits. Try an outfit, campsite or doof stick. It is not for a specific person. Give us enough detail to find a stranger, not enough to accidentally summon your ex.</span>
             <input name="recipient" maxlength="120" placeholder="e.g. Someone with a mushroom doof stick" aria-describedby="recipient-help" autocomplete="off" required>
           </label>
-          <label>Where might we find them?<input name="location" maxlength="80" required></label>
+          <label>Suggested place to look (optional)<input name="location" maxlength="80"></label>
           <label>Your name (optional)<input name="sender" maxlength="80"></label>
         </div>
         <div class="postcard-message">
-          <label>Your message<textarea name="message" maxlength="500" required></textarea></label>
+          <label>Your message<textarea name="message" maxlength="500" required></textarea>
+            <span class="field-help">Try a compliment, a terrible joke, a tiny pep talk, or a side quest or challenge.</span>
+          </label>
         </div>
         <button>Send to the Postie</button>
       </form>
     </section>
     <p id="result" class="ticket" role="status" hidden></p>
 
-    <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+    <p class="connection-note">Connected to the festival, not the internet.</p>
   </main>
   <script>
     const send = document.querySelector('#send');
@@ -206,7 +218,7 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       });
       const data = await response.json();
       result.hidden = false;
-      result.textContent = data.error || `Letter accepted. Now it is officially someone else's problem. Tracking number: ${data.tracking}`;
+      result.textContent = data.error || `Letter accepted. Now it is officially someone else's problem. Screenshot your tracking number: ${data.tracking}`;
       if (response.ok) {
         const link = document.createElement('a');
         link.href = `/track?tracking=${encodeURIComponent(data.tracking)}`;
@@ -262,7 +274,7 @@ const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <p id="status" class="tracking-result" role="status"></p>
     </section>
 
-    <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+    <p class="connection-note">Connected to the festival, not the internet.</p>
   </main>
   <script>
     const track = document.querySelector('#track');

@@ -5,12 +5,14 @@ ESP32-S3. The device creates its own Wi-Fi network. Attendees connect directly
 with their phones and use a small local website; no internet service, cloud
 account, or upstream router is required.
 
-The project currently implements Stages 0–10 below. Display hardware is
-explicitly deferred and must not be added without a separate decision.
+The project currently implements Stages 0–10 below. Stage 11 display design is
+approved, while driver integration remains pending.
 
 The selected CrowPanel display and its supplied GPIO assignments are recorded
-in [`HARDWARE.md`](HARDWARE.md). That document is a static wiring reference;
-display and input drivers remain deferred.
+in [`HARDWARE.md`](HARDWARE.md). The approved read-only screen behaviour and
+native-resolution layout are recorded in
+[`EPAPER_DISPLAY.md`](EPAPER_DISPLAY.md). Display and input drivers remain
+unimplemented.
 
 ## Product specification
 
@@ -428,23 +430,26 @@ separate reviewable commit.
 | 8 | Proper mobile public UI and derived statistics | Complete |
 | 9 | Reliability, limits, encoding, pruning, duplicate handling | Complete; hardware verification pending |
 | 10 | Runtime diagnostics and multi-phone test preparation | Complete; load test pending |
-| 11 | E-ink/display integration | **Forbidden until explicitly authorized** |
+| 11 | E-ink/display integration | Design approved; driver implementation pending |
 
-No display libraries, display pins, layout, refresh strategy, or placeholder
-display module belong in the project yet.
+No display-driver code or dependency is present yet. The approved layout,
+rotation behaviour, font constraints, and initial refresh policy are specified
+in `EPAPER_DISPLAY.md`.
 
-## Recommended next work, excluding display
+## Recommended next work
 
-1. Add the native, web-preview, generated-asset, and ESP32 build checks to CI.
-2. Extend the domain seam to cover full-store pruning, exact duplicate payload
+1. Implement Stage 11 behind a small display abstraction, including a native
+   framebuffer renderer test that does not require hardware.
+2. Add the native, web-preview, generated-asset, and ESP32 build checks to CI.
+3. Extend the domain seam to cover full-store pruning, exact duplicate payload
    comparison, statistics, and complete mutation rollback.
-3. Add checksums/generation metadata and explicit migration/recovery behavior
+4. Add checksums/generation metadata and explicit migration/recovery behavior
    to persistent formats.
-4. Decide whether reboot-extended public expiry is acceptable; otherwise add an
+5. Decide whether reboot-extended public expiry is acceptable; otherwise add an
    admin-set festival clock or battery-backed RTC.
-5. Prototype the read-only SD asset provider behind a compile-time flag after
+6. Prototype the read-only SD asset provider behind a compile-time flag after
    choosing the exact card hardware and wiring.
-6. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
+7. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
    `.local` is commonly treated as mDNS-special.
-7. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
+8. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
    hardware tests while watching protected diagnostics.

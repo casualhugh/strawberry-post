@@ -42,8 +42,8 @@ The selected device is an Elecrow CrowPanel 5.79-inch black-and-white E-Paper
 HMI (272 × 792) using an ESP32-S3-WROOM-1-N8R8 module. A project-owned
 PlatformIO board manifest configures its 8 MB QSPI flash, 8 MB OPI PSRAM,
 240 MHz CPU, and UART upload. `HARDWARE.md` is the canonical pin and peripheral
-power map. Display, buttons, and TF-card drivers are intentionally not yet
-implemented.
+power map. The display design is approved in `EPAPER_DISPLAY.md`; display,
+buttons, and TF-card drivers are not yet implemented.
 
 Public features:
 
@@ -114,8 +114,8 @@ the internal persistent-data store.
 
 ## Stage contract
 
-Stages 0–10 are implemented and under review. Stage 11 is forbidden unless
-separately authorized.
+Stages 0–10 are implemented and under review. Stage 11 design is approved, but
+the display driver is not yet implemented.
 
 - **Stage 0: Baseline:** inspect `platformio.ini`, identify environment/board/
   framework, and prove the untouched project builds from the CLI.
@@ -143,8 +143,8 @@ separately authorized.
   heap/stack friendliness, and useful diagnostics.
 - **Stage 10: Load-test preparation:** AP-client, request, heap, storage, and
   record diagnostics; prepare for rather than assume multi-phone success.
-- **Stage 11: Display:** not begun. There must be no e-ink/display dependency,
-  code, pin configuration, layout, refresh, or power behavior.
+- **Stage 11: Display:** design approved in `EPAPER_DISPLAY.md`; driver,
+  framebuffer renderer, scheduling, and hardware integration are not begun.
 
 Every stage was required to build before the next and remain a separate commit.
 Note that `532fa0c` is an additional Stage 1 design-decision commit, not a stage
@@ -303,7 +303,9 @@ titles.
   Assess boot-only read, PSRAM cache, manifest/hash/size validation, read-only
   operation, embedded fallback, all-or-nothing bundle selection, missing card,
   bad FAT, hot removal, exact card hardware, and SPI pin selection.
-- Confirm display work is entirely absent. Do not recommend adding it.
+- Confirm display implementation is absent and the approved Stage 11 design is
+  internally consistent, testable before hardware, and appropriately cautious
+  about unverified refresh and power behaviour.
 
 ## Required response format
 

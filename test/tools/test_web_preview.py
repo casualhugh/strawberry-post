@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import html
+import http.client
 import json
 import sys
 import threading
@@ -216,6 +217,20 @@ class WebPreviewTests(unittest.TestCase):
         )
         self.assertEqual(404, status)
         self.assertIn("error", error)
+
+    def test_malformed_form_encoding_and_negative_length_are_rejected(self) -> None:
+        for body in (b"", b"category=General&message=%FF"):
+            connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
+            try:
+                connection.request("POST", "/api/notices", body=body, headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Length": str(len(body)) if body else "-1",
+                })
+                response = connection.getresponse()
+                self.assertEqual(400, response.status)
+                self.assertIn("error", json.loads(response.read()))
+            finally:
+                connection.close()
 
     def test_form_limits_and_errors_match_firmware_shape(self) -> None:
         status, error = self.request_json(

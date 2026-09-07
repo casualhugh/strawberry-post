@@ -1,9 +1,8 @@
 # E-paper notice board design
 
-Stage 11 display design was approved and its driver integration completed on 7
-September 2026. Physical-panel verification is still required.
+The display driver is implemented. Physical-panel verification is still required.
 
-![Approved 792 by 272 display mockup](docs/epaper-board-mockup.png)
+![Approved 792 by 272 display mockup](epaper-board-mockup.png)
 
 ## Purpose
 
@@ -45,8 +44,7 @@ Elecrow's supplied driver provides fixed-width printable ASCII bitmap tables at
 12, 16, 24, and 48 pixels. The approved layout uses the 16 and 24-pixel tables.
 
 The website accepts valid UTF-8, including emoji, but the stock display font
-does not. Display rendering must convert punctuation to safe ASCII and replace
-unsupported characters without changing the stored or web-visible message.
+does not. Display rendering replaces unsupported characters with `?` without changing the stored or web-visible message.
 Text fitting and sanitisation must be independently testable without hardware.
 Those pure behaviours live in `lib/epaper_core` and are covered by native tests.
 
@@ -76,8 +74,8 @@ the CrowPanel before festival use.
 The implementation is isolated behind `src/epaper_display.h`. It vendors the
 driver and font tables from Elecrow commit
 `453aa9ec9ccb94bc0c91c81c68eaeef851317aee`. The upstream infinite BUSY wait
-has been replaced with a yielding 15-second timeout so display trouble cannot
-freeze the rest of Strawberry Post.
+has been replaced with a yielding 15-second timeout. Refresh calls still block
+the cooperative HTTP/DNS loop; yielding only services background runtime work.
 
 ## Hardware verification still required
 

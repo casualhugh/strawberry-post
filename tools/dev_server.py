@@ -355,6 +355,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
         except ValueError:
             self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid Content-Length")
             return None
+        if length < 0:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid Content-Length")
+            return None
         if length > MAX_FORM_BYTES:
             self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Request is too large")
             return None
@@ -364,7 +367,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return None
         try:
             raw = self.rfile.read(length).decode("utf-8", errors="strict")
-            parsed = parse_qs(raw, keep_blank_values=True, max_num_fields=MAX_FORM_FIELDS)
+            parsed = parse_qs(raw, keep_blank_values=True, max_num_fields=MAX_FORM_FIELDS, errors="strict")
         except (UnicodeDecodeError, ValueError):
             self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid form data")
             return None

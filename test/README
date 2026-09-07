@@ -8,7 +8,7 @@ text sanitising, line wrapping, notice rotation, hashing, and refresh policy.
 
 Run only the desktop environment:
 
-    C:\Users\Hughe\.platformio\penv\Scripts\platformio.exe test --environment native
+    pio test --environment native
 
 PlatformIO supplies Unity but not a host compiler. GCC/G++ must be available on
 PATH. Hardware network, captive-portal, LittleFS power-cut, and load behavior
@@ -18,4 +18,4 @@ remain outside these suites.
 and checks the generated web bundle plus public and authenticated HTTP flows.
 Run it with:
 
-    C:\Users\Hughe\.platformio\penv\Scripts\python.exe -m unittest discover -s test\tools -v
+    python -m unittest discover -s test\tools -v

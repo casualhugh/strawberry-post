@@ -6,7 +6,7 @@ black-and-white **272 × 792 pixel** panel. Depending on display rotation,
 software may describe the same panel as 792 × 272 pixels.
 
 The project-owned PlatformIO board definition is
-[`boards/crowpanel_579_epaper.json`](boards/crowpanel_579_epaper.json). It
+[`boards/crowpanel_579_epaper.json`](../boards/crowpanel_579_epaper.json). It
 selects the module's 8 MB QSPI flash, 8 MB octal-SPI PSRAM, 240 MHz CPU, generic
 ESP32-S3 Arduino pin variant, and UART upload through the board's USB-to-serial
 bridge. Explicit application pin assignments below take precedence over generic

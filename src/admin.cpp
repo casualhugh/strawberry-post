@@ -67,6 +67,7 @@ void handleOverview(WebServer& server) {
   server.sendContent(F("],\"notices\":["));
   for (size_t index = 0; index < storedNoticeCount(); ++index) {
     const NoticeRecord* notice = noticeAt(index);
+    if (!notice) break;
     response = "";
     if (index > 0) response += ',';
     response += F("{\"id\":");

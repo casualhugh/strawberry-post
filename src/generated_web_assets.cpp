@@ -9,27 +9,41 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Notice Board | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
-<body>
+<body class="public-page">
   <main>
-    <h1>Strawberry Post</h1>
-    <p>Community notices and local letters, available here without internet.</p>
+    <header class="brand">
+      <img class="brand-logo" src="/logo.svg?v=8" alt="" width="72" height="90">
+      <div class="brand-copy">
+        <p class="eyebrow">Strawberry Fields &bull; NSW &#8596; VIC</p>
+        <h1>Strawberry Post</h1>
+        <p>Welcome to Strawberry Post Office.</p>
+      </div>
+    </header>
+
+    <div class="river-rule" aria-hidden="true"></div>
 
     <section class="board-heading">
       <div>
+        <p class="section-kicker">The festival wire</p>
         <h2>Notice Board</h2>
-        <p>See what people nearby have shared.</p>
+        <p>The festival grapevine, now with fewer rumours and more readable handwriting.</p>
       </div>
-      <a class="letter-link" href="/letters">Send or track a letter</a>
+      <div class="letter-actions">
+        <a class="letter-link" href="/letters">Send a letter</a>
+        <a class="letter-link letter-link-secondary" href="/track">Track a letter</a>
+      </div>
     </section>
 
-    <section id="posts" aria-label="Current notices">
-      <p class="hint">Loading notices&hellip;</p>
+    <section id="posts" class="notice-board" aria-label="Current notices">
+      <p class="hint">Checking the pigeon holes...</p>
     </section>
 
     <section class="post-form" aria-labelledby="post-heading">
+      <p class="section-kicker">Add to the board</p>
       <h2 id="post-heading">Pin a notice</h2>
+      <p>Pin something useful, weird or urgently needed. Keep it vague enough for a stranger to recognise.</p>
       <form id="notice-form">
         <label>Category
           <select name="category" required>
@@ -43,7 +57,6 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
             <option>For Sale / Swap</option>
           </select>
         </label>
-        <p class="hint">Looking for someone you met? Choose &ldquo;Missed Connection&rdquo;.</p>
         <label>Message
           <textarea name="message" maxlength="512" required></textarea>
         </label>
@@ -52,13 +65,15 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <p id="result" role="status"></p>
     </section>
 
-    <p id="delivery-status" class="status" aria-live="polite">Loading delivery status&hellip;</p>
-    <section class="stats" aria-label="Postal statistics">
-      <div class="stat"><strong id="notices-active">&ndash;</strong>active notices</div>
-      <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
-      <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
-    </section>
-    <p class="hint">Connected to STRAWBERRY POST &mdash; no internet needed.</p>
+    <footer class="station-footer">
+      <p id="delivery-status" class="status" aria-live="polite">Checking the pigeon holes...</p>
+      <section class="stats" aria-label="Postal statistics">
+        <div class="stat"><strong id="notices-active">&ndash;</strong>active notices</div>
+        <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
+        <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
+      </section>
+      <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+    </footer>
   </main>
   <script>
     const posts = document.querySelector('#posts');
@@ -76,12 +91,13 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       const response = await fetch('/api/notices');
       const data = await response.json();
       if (!data.notices.length) {
-        posts.replaceChildren(element('p', 'No notices yet. Be the first to pin one.'));
+        posts.replaceChildren(element('p', 'Nothing pinned yet. Either everyone is being very sensible, or they are still asleep.'));
         return;
       }
       posts.replaceChildren(...data.notices.map(notice => {
         const article = document.createElement('article');
         article.className = 'post';
+        article.dataset.category = notice.category;
         article.append(element('strong', notice.category), element('p', notice.message));
         return article;
       }));
@@ -91,7 +107,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       const response = await fetch('/api/stats');
       const stats = await response.json();
       const out = stats.lettersOutForDelivery;
-      text('#delivery-status', `${out} ${out === 1 ? 'letter' : 'letters'} currently out for delivery`);
+      text('#delivery-status', `${out} ${out === 1 ? 'letter' : 'letters'} out for delivery. The Postie has likely gone walkabout.`);
       text('#letters-waiting', stats.lettersWaiting);
       text('#letters-delivered', stats.lettersDelivered);
       text('#notices-active', stats.noticesActive);
@@ -106,7 +122,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
         body: new URLSearchParams(new FormData(form))
       });
       const data = await response.json();
-      result.textContent = response.ok ? 'Your notice is now on the board.' : data.error;
+      result.textContent = response.ok ? 'Notice accepted. Someone will probably read that.' : data.error;
       if (response.ok) {
         form.reset();
         await Promise.all([loadNotices(), loadStats()]);
@@ -114,7 +130,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
     });
 
     Promise.all([loadNotices(), loadStats()]).catch(() => {
-      result.textContent = 'The board is temporarily unavailable.';
+      result.textContent = 'The sorting room is having a little lie-down. Try again shortly.';
     });
   </script>
 </body>
@@ -126,34 +142,60 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Digital Letters | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css">
+  <title>Send a Letter | Strawberry Post</title>
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
-<body>
+<body class="public-page letters-page">
   <main>
-    <a class="back" href="/">&larr; Strawberry Post</a>
-    <h1>Send a Digital Letter</h1>
-    <p class="hint">Only the Postie can read your message. Keep the tracking code shown after sending.</p>
-    <form id="send">
-      <label>Who is it for?<input name="recipient" maxlength="120" required></label>
-      <label>Where might we find them?<input name="location" maxlength="80" required></label>
-      <label>Your message<textarea name="message" maxlength="500" required></textarea></label>
-      <label>Your name (optional)<input name="sender" maxlength="80"></label>
-      <button>Send to the Postie</button>
-    </form>
+    <a class="back" href="/">&larr; Back to the notice board</a>
+    <header class="brand brand-compact">
+      <img class="brand-logo" src="/logo.svg?v=8" alt="" width="54" height="68">
+      <div class="brand-copy">
+        <p class="eyebrow">Strawberry Fields &bull; Festival post</p>
+        <h1>Send a Letter</h1>
+        <p>Private mail carried by the Postie, who has been briefed and appears reasonably trustworthy.</p>
+      </div>
+    </header>
+
+    <div class="river-rule" aria-hidden="true"></div>
+    <nav class="letter-page-nav" aria-label="Festival post services">
+      <span>Write a letter</span>
+      <a href="/track">Track a letter &#8594;</a>
+    </nav>
+
+    <section class="postal-panel" aria-labelledby="send-heading">
+      <div class="postcard-top">
+        <div>
+          <h2 id="send-heading">Write your letter</h2>
+          <p class="hint">Only the Postie can read it. Keep the tracking number shown after sending.</p>
+        </div>
+        <div class="postcard-stamp" aria-hidden="true">
+          <img src="/logo.svg?v=8" alt="" width="30" height="38">
+          <span>Strawberry Post</span>
+        </div>
+      </div>
+      <form id="send" class="postcard-form">
+        <div class="postcard-address">
+          <label>Who should the Postie look for?
+            <span class="field-help" id="recipient-help">Keep it vague but recognisable. The Postie will hand it to the first stranger they meet who fits. Try an outfit, campsite or doof stick. It is not for a specific person. Give us enough detail to find a stranger, not enough to accidentally summon your ex.</span>
+            <input name="recipient" maxlength="120" placeholder="e.g. Someone with a mushroom doof stick" aria-describedby="recipient-help" autocomplete="off" required>
+          </label>
+          <label>Where might we find them?<input name="location" maxlength="80" required></label>
+          <label>Your name (optional)<input name="sender" maxlength="80"></label>
+        </div>
+        <div class="postcard-message">
+          <label>Your message<textarea name="message" maxlength="500" required></textarea></label>
+        </div>
+        <button>Send to the Postie</button>
+      </form>
+    </section>
     <p id="result" class="ticket" role="status" hidden></p>
-    <h2>Track a letter</h2>
-    <form id="track">
-      <label>Tracking code<input name="tracking" maxlength="10" placeholder="STRAW-0427" required></label>
-      <button>Check status</button>
-    </form>
-    <p id="status" role="status"></p>
+
+    <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
   </main>
   <script>
     const send = document.querySelector('#send');
     const result = document.querySelector('#result');
-    const track = document.querySelector('#track');
-    const status = document.querySelector('#status');
 
     send.addEventListener('submit', async event => {
       event.preventDefault();
@@ -164,16 +206,94 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       });
       const data = await response.json();
       result.hidden = false;
-      result.textContent = data.error || `Keep this tracking code: ${data.tracking}`;
-      if (response.ok) send.reset();
+      result.textContent = data.error || `Letter accepted. Now it is officially someone else's problem. Tracking number: ${data.tracking}`;
+      if (response.ok) {
+        const link = document.createElement('a');
+        link.href = `/track?tracking=${encodeURIComponent(data.tracking)}`;
+        link.textContent = 'Track this letter';
+        result.append(document.createElement('br'), link);
+        send.reset();
+      }
     });
+  </script>
+</body>
+</html>
+)STRAWBERRY_ASSET";
+
+const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Track a Letter | Strawberry Post</title>
+  <link rel="stylesheet" href="/style.css?v=8">
+</head>
+<body class="public-page letters-page">
+  <main>
+    <a class="back" href="/">&larr; Back to the notice board</a>
+    <header class="brand brand-compact">
+      <img class="brand-logo" src="/logo.svg?v=8" alt="" width="54" height="68">
+      <div class="brand-copy">
+        <p class="eyebrow">Strawberry Fields &bull; Festival post</p>
+        <h1>Track a Letter</h1>
+        <p>Enter your tracking number and we&rsquo;ll see whether the Postie has made it out of the sorting room.</p>
+      </div>
+    </header>
+
+    <div class="river-rule" aria-hidden="true"></div>
+    <nav class="letter-page-nav" aria-label="Festival post services">
+      <a href="/letters">&larr; Write a letter</a>
+      <span>Track a letter</span>
+    </nav>
+
+    <section class="tracking-panel tracking-page-panel" aria-labelledby="track-heading">
+      <p class="section-kicker">Tracking number</p>
+      <h2 id="track-heading">Check with the sorting room</h2>
+      <p class="hint">Enter the tracking number you received after sending your letter.</p>
+      <form id="track">
+        <label>Tracking number
+          <span class="tracking-number-input">
+            <span class="tracking-prefix" aria-hidden="true">STRAW-</span>
+            <input name="trackingDigits" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="0427" aria-label="Tracking number digits" autocomplete="off" required>
+          </span>
+        </label>
+        <button>Track my letter</button>
+      </form>
+      <p id="status" class="tracking-result" role="status"></p>
+    </section>
+
+    <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+  </main>
+  <script>
+    const track = document.querySelector('#track');
+    const status = document.querySelector('#status');
+    const requested = new URLSearchParams(location.search).get('tracking');
+    if (requested) track.elements.trackingDigits.value = requested.replace(/^STRAW-/i, '').replace(/[^0-9]/g, '').slice(0, 4);
 
     track.addEventListener('submit', async event => {
       event.preventDefault();
-      const code = new FormData(track).get('tracking');
-      const response = await fetch(`/api/letters/status?tracking=${encodeURIComponent(code)}`);
+      const digits = new FormData(track).get('trackingDigits');
+      const number = `STRAW-${digits}`;
+      const response = await fetch(`/api/letters/status?tracking=${encodeURIComponent(number)}`);
       const data = await response.json();
-      status.textContent = data.error || `${data.tracking}: ${data.status}`;
+      if (!response.ok) {
+        if (response.status === 400) {
+          status.textContent = 'That number has gone walkabout. Check the digits and try again.';
+        } else if (response.status === 404) {
+          status.textContent = 'We could not find that letter. It may be hiding near the lost thongs.';
+        } else {
+          status.textContent = data.error || 'The sorting room is having a little lie-down. Try again shortly.';
+        }
+        return;
+      }
+      const labels = {
+        Waiting: 'Still at the sorting table',
+        Written: 'Postie has it',
+        OutForDelivery: 'Postie has it',
+        Delivered: 'Delivered, somehow',
+        CouldNotFind: 'Back at the post office'
+      };
+      status.textContent = data.error || `${data.tracking}: ${labels[data.status] || data.status}`;
     });
   </script>
 </body>
@@ -186,7 +306,7 @@ const char kAdminPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Postie | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
 <body class="admin">
   <main>
@@ -234,18 +354,23 @@ const char kAdminPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       const data = await response.json();
 
       const letters = document.querySelector('#letters');
-      letters.replaceChildren(...data.letters.map(letter => {
+      if (!data.letters.length) {
+        letters.replaceChildren(element('p', 'No letters waiting. Either everyone is organised, or nobody has found the post office.'));
+      } else {
+        letters.replaceChildren(...data.letters.map(letter => {
         const card = element('details', undefined, 'card');
         if (letter.status === 'Waiting') card.open = true;
-        card.append(element('summary', `${letter.tracking} — ${letter.recipient} — ${letter.status}`));
+        card.append(element('summary', `${letter.tracking} | ${letter.recipient} | ${letter.status}`));
         const details = element('dl', undefined, 'private');
         [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
           .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
         card.append(details);
         ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
           card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
+        card.append(actionButton('Delete', () => post('/api/admin/letters/delete', {id: letter.id}), 'alt'));
         return card;
-      }));
+        }));
+      }
 
       const notices = document.querySelector('#notices');
       notices.replaceChildren(...data.notices.map(notice => {
@@ -275,7 +400,7 @@ const char kDiagnosticsPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Diagnostics | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
 <body class="admin">
   <main>
@@ -306,59 +431,118 @@ const char kDiagnosticsPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
 
 const char kPublicStyles[] PROGMEM = R"STRAWBERRY_ASSET(:root {
   color-scheme: light;
-  --red: #a92330;
-  --deep: #55251f;
-  --cream: #fff8e7;
-  --paper: #fffdf5;
-  --cork: #c79568;
-  --muted: #78645b;
+  --red: #ad1f2d;
+  --red-dark: #74151e;
+  --leaf: #315c42;
+  --river: #39727b;
+  --ochre: #cf9140;
+  --ink: #402d27;
+  --cream: #fbf3dd;
+  --paper: #fffdf4;
+  --sand: #efdfbd;
+  --cork: #bd8658;
+  --timber: #795039;
+  --muted: #75645a;
+  --line: #d6bb8c;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--cream);
-  color: var(--deep);
+  background:
+    linear-gradient(180deg, #e9d6ae 0, var(--cream) 12rem, #fffaf0 100%);
+  color: var(--ink);
   font: 17px/1.45 system-ui, -apple-system, sans-serif;
 }
 
 body::before {
   content: "";
   display: block;
-  height: .55rem;
-  background: repeating-linear-gradient(
-    135deg,
-    var(--red) 0 18px,
-    var(--paper) 18px 36px,
-    #315b6e 36px 54px,
-    var(--paper) 54px 72px
+  height: .7rem;
+  background: linear-gradient(
+    90deg,
+    var(--red) 0 38%,
+    var(--leaf) 38% 66%,
+    var(--river) 66% 100%
   );
+  box-shadow: 0 3px 0 #ffffff75;
 }
 
 main {
-  width: min(100% - 2rem, 42rem);
+  width: min(100% - 2rem, 48rem);
   margin: 0 auto;
-  padding: 1.4rem 0 3rem;
+  padding: 1.6rem 0 3rem;
 }
 
-h1, h2 { color: var(--red); line-height: 1.1; }
+h1, h2 { color: var(--red); line-height: 1.08; }
 h1 {
-  margin: .8rem 0;
+  margin: .25rem 0;
   font-family: Georgia, serif;
   font-size: clamp(2.2rem, 10vw, 3.7rem);
   letter-spacing: -.03em;
 }
 
-a { color: var(--red); }
+h2 {
+  margin: .25rem 0;
+  font-family: Georgia, serif;
+  font-size: clamp(1.65rem, 6vw, 2.25rem);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  position: relative;
+  padding: 1.1rem 1.25rem;
+  border: 2px solid var(--timber);
+  background: var(--paper);
+  box-shadow: 6px 6px 0 #79503924;
+}
+
+.brand-logo {
+  width: 5rem;
+  height: auto;
+  flex: 0 0 auto;
+}
+
+.brand-copy { min-width: 0; }
+.brand h1, .brand p { margin: .25rem 0; }
+.brand .eyebrow { margin-bottom: .15rem; }
+.brand > .brand-copy > p:last-child { max-width: 34rem; }
+.brand-compact .brand-logo { width: 3.4rem; }
+.brand-compact h1 { font-size: clamp(2rem, 9vw, 3.2rem); }
+
+.eyebrow, .section-kicker {
+  color: var(--leaf);
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.river-rule {
+  height: .75rem;
+  margin: 1.15rem 0 1.35rem;
+  border-top: 2px solid var(--river);
+  border-bottom: 2px solid var(--river);
+  background: repeating-linear-gradient(
+    -12deg,
+    transparent 0 18px,
+    #39727b35 19px 24px,
+    transparent 25px 42px
+  );
+}
+
+a { color: var(--red); text-underline-offset: .15em; }
 button {
   display: block;
   width: 100%;
   padding: 1rem;
-  border: 0;
-  border-radius: .5rem;
+  border: 2px solid var(--red-dark);
+  border-radius: .25rem;
   background: var(--red);
-  box-shadow: 0 3px 0 #71141d;
+  box-shadow: 4px 4px 0 var(--red-dark);
   color: #fff;
   font: 700 1.05rem system-ui;
   text-align: center;
@@ -366,15 +550,23 @@ button {
 }
 
 button:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #71141d;
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--red-dark);
 }
 
 .status, .ticket {
   padding: 1rem;
-  border: 2px dashed var(--cork);
+  border: 2px dashed var(--red);
   background: var(--paper);
   text-align: center;
+}
+
+.ticket {
+  position: relative;
+  margin: 1rem 0;
+  color: var(--red-dark);
+  font: 800 1.1rem/1.4 ui-monospace, Consolas, monospace;
+  letter-spacing: .02em;
 }
 
 .stats {
@@ -386,7 +578,7 @@ button:active {
 
 .stat {
   padding: .8rem;
-  border: 1px solid #ead7bb;
+  border: 1px solid var(--line);
   background: var(--paper);
   text-align: center;
 }
@@ -398,41 +590,342 @@ input, select, textarea {
   width: 100%;
   margin-top: .35rem;
   padding: .85rem;
-  border: 1px solid #b99b80;
-  border-radius: .35rem;
+  border: 2px solid #a7886d;
+  border-radius: .2rem;
   background: #fff;
   color: inherit;
   font: inherit;
 }
 
 textarea { min-height: 9rem; resize: vertical; }
+.section-kicker { margin: 0 0 .15rem; }
 .board-heading {
   display: flex;
   align-items: end;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 1.5rem;
+  margin: 0 0 .9rem;
 }
 .board-heading h2, .board-heading p { margin: .25rem 0; }
-.letter-link { font-weight: 700; white-space: nowrap; }
-.post-form {
-  margin: 2rem 0;
-  padding: 1rem;
-  border: 2px dashed var(--cork);
-  background: #f8e8cb;
-}
-.post, .card {
-  margin: 1rem 0;
-  padding: 1rem;
-  border-left: 5px solid var(--red);
-  background: var(--paper);
-  box-shadow: 0 2px 8px #6b3a2520;
+.letter-link {
+  display: inline-block;
+  padding: .65rem .8rem;
+  border: 2px solid var(--leaf);
+  background: var(--leaf);
+  box-shadow: 3px 3px 0 #173b28;
+  color: #fff;
+  font-size: .92rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
+.letter-actions {
+  display: flex;
+  align-items: stretch;
+  gap: .55rem;
+}
+
+.letter-link-secondary {
+  border-color: var(--river);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--river);
+  color: var(--river);
+}
+
+.notice-board {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  border: .45rem solid var(--timber);
+  background:
+    radial-gradient(circle at 15% 20%, #ffffff1f 0 2px, transparent 3px),
+    radial-gradient(circle at 72% 62%, #6a3f2520 0 1px, transparent 2px),
+    var(--cork);
+  background-size: 32px 35px, 25px 29px, auto;
+  box-shadow: inset 0 0 0 2px #e5b47d, 5px 7px 0 #51342028;
+}
+
+.notice-board > .hint, .notice-board > p {
+  margin: .35rem;
+  color: #3f281d;
+}
+
+.post-form {
+  position: relative;
+  overflow: hidden;
+  margin: 2rem 0;
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, #fffdf4 0, var(--cream) 72%, #eee3c9 100%);
+  box-shadow: 7px 8px 0 #73502b35;
+  transform: rotate(-.25deg);
+}
+
+.post-form::before {
+  content: "";
+  position: absolute;
+  top: .55rem;
+  left: 50%;
+  z-index: 1;
+  width: .85rem;
+  height: .85rem;
+  border: 2px solid #78131d;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 1px 2px 2px #3d211f66;
+}
+
+.post-form::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-top: 2.3rem solid transparent;
+  border-right: 2.3rem solid #e2d7bc;
+}
+
+.post-form form { position: relative; z-index: 1; }
+.post-form input, .post-form select {
+  border-color: #b99b80;
+  background: #fff;
+}
+
+.postcard-message textarea, .post-form textarea {
+  min-height: 10rem;
+  padding: .45rem .35rem;
+  border: 0;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 1.72rem,
+      #39727b45 1.72rem 1.79rem
+    );
+  line-height: 1.79rem;
+}
+
+.post-form textarea { border-bottom: 2px solid #a7886d; }
+.post, .card {
+  position: relative;
+  margin: .85rem .2rem;
+  padding: 1.15rem 1rem .85rem;
+  border: 1px solid #d8c9a8;
+  border-left: 6px solid var(--red);
+  background: var(--paper);
+  box-shadow: 3px 4px 5px #4f2e1b32;
+}
+
+.post::before {
+  content: "";
+  position: absolute;
+  top: -.38rem;
+  left: 50%;
+  width: .72rem;
+  height: .72rem;
+  border: 2px solid #78131d;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 1px 2px 2px #3d211f55;
+}
+
+.post:nth-child(even) { transform: rotate(.18deg); }
+.post:nth-child(odd) { transform: rotate(-.18deg); }
+.post strong {
+  display: inline-block;
+  padding: .18rem .5rem;
+  background: var(--red);
+  color: #fff;
+  font-size: .76rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.post[data-category="Missed Connection"] strong { background: #b63863; }
+.post[data-category="Lost & Found"] strong { background: #9a601c; }
+.post[data-category="Event / Schedule"] strong { background: var(--red); }
+.post[data-category="Ride Share"] strong { background: var(--river); }
+.post[data-category="Help Wanted"] strong { background: var(--leaf); }
+.post[data-category="For Sale / Swap"] strong { background: #72518c; }
+
 .post p, .card p, .private dd { white-space: pre-wrap; }
-.back { display: inline-block; margin: .4rem 0 1rem; }
+.back {
+  display: inline-block;
+  margin: .2rem 0 1rem;
+  font-size: .9rem;
+  font-weight: 800;
+}
 .hint { color: var(--muted); font-size: .92rem; }
 [hidden] { display: none !important; }
+
+.postal-panel, .tracking-panel {
+  margin: 1.25rem 0;
+  padding: 1.25rem;
+  background: var(--paper);
+  box-shadow: 5px 6px 0 #79503922;
+}
+
+.postal-panel {
+  border: 2px solid var(--timber);
+  border-top: .55rem solid var(--red);
+  background:
+    linear-gradient(135deg, #fffefa 0, var(--paper) 70%, #f5e9cf 100%);
+}
+
+.postcard-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding-bottom: .8rem;
+  border-bottom: 2px solid var(--line);
+}
+
+.postcard-top h2, .postcard-top p { margin-top: .2rem; }
+
+.postcard-stamp {
+  display: grid;
+  flex: 0 0 4.4rem;
+  min-height: 5rem;
+  place-items: center;
+  padding: .35rem;
+  border: 3px double var(--red);
+  background: #fffaf0;
+  color: var(--red-dark);
+  text-align: center;
+}
+
+.postcard-stamp img { width: 1.85rem; height: auto; }
+.postcard-stamp span {
+  max-width: 3.4rem;
+  font-size: .5rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.postcard-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 1.25rem;
+}
+
+.postcard-address {
+  grid-column: 2;
+  grid-row: 1;
+  padding-left: 1.25rem;
+  border-left: 2px solid var(--line);
+}
+
+.postcard-message { grid-column: 1; grid-row: 1; }
+.postcard-form button { grid-column: 1 / -1; }
+
+.postcard-address input {
+  padding: .55rem .15rem .35rem;
+  border: 0;
+  border-bottom: 2px solid #a7886d;
+  border-radius: 0;
+  background: transparent;
+}
+
+.postcard-message textarea {
+  min-height: 17rem;
+  padding: .45rem .35rem;
+  border: 0;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 1.72rem,
+      #39727b45 1.72rem 1.79rem
+    );
+  line-height: 1.79rem;
+}
+
+.postcard-address input:focus, .postcard-message textarea:focus {
+  outline: 3px solid #39727b55;
+  outline-offset: 2px;
+}
+
+.field-help {
+  display: block;
+  margin: .18rem 0 .35rem;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.tracking-panel {
+  border: 2px dashed var(--river);
+  background:
+    linear-gradient(90deg, transparent 0 96%, #39727b17 96%),
+    var(--paper);
+  background-size: 1.2rem 100%, auto;
+}
+
+.tracking-result:not(:empty) {
+  margin: 1rem 0 0;
+  padding: .75rem;
+  border-left: 5px solid var(--river);
+  background: #e8f1ef;
+  font-weight: 800;
+}
+
+.tracking-number-input {
+  display: flex;
+  align-items: stretch;
+  margin-top: .35rem;
+}
+
+.tracking-prefix {
+  display: grid;
+  place-items: center;
+  padding: 0 .75rem;
+  border: 2px solid #b99b80;
+  border-right: 0;
+  background: #f1e3c8;
+  color: var(--red-dark);
+  font: 800 1rem ui-monospace, Consolas, monospace;
+}
+
+.tracking-number-input input {
+  flex: 1;
+  width: auto;
+  margin-top: 0;
+  font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: .1em;
+}
+
+.tracking-page-panel { max-width: 35rem; margin: 1.25rem auto; }
+
+.letter-page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -.35rem 0 1.2rem;
+  padding: .7rem .85rem;
+  border: 1px solid var(--line);
+  background: #fffaf0;
+  font-size: .88rem;
+  font-weight: 800;
+}
+
+.letter-page-nav span { color: var(--leaf); }
+
+.station-footer { margin-top: 2rem; }
+.connection-note {
+  margin-top: 1.1rem;
+  color: var(--leaf);
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-align: center;
+  text-transform: uppercase;
+}
 
 .admin main { width: min(100% - 2rem, 52rem); }
 .admin button {
@@ -463,7 +956,34 @@ textarea { min-height: 9rem; resize: vertical; }
 
 @media (max-width: 30rem) {
   .board-heading { align-items: start; flex-direction: column; }
+  .letter-actions { width: 100%; }
+  .letter-link { flex: 1; text-align: center; white-space: normal; }
+  .brand { align-items: flex-start; }
+  .brand-logo { width: 3.7rem; }
+  .brand { gap: .8rem; padding: .9rem; }
+  .brand h1 { font-size: clamp(2.05rem, 10vw, 2.35rem); }
+  .eyebrow { font-size: .62rem; letter-spacing: .1em; }
+  .notice-board { padding: .55rem; border-width: .35rem; }
+  .post { margin: .75rem 0; transform: none !important; }
+  .postal-panel, .tracking-panel, .post-form { padding: 1rem; }
+  .post-form { transform: rotate(-.15deg); }
+  .postcard-top { gap: .75rem; }
+  .postcard-stamp { flex-basis: 3.6rem; min-height: 4.25rem; }
+  .postcard-form { display: block; }
+  .postcard-address {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .postcard-message textarea { min-height: 11rem; }
 }
+)STRAWBERRY_ASSET";
+
+const char kLogoSvg[] PROGMEM = R"STRAWBERRY_ASSET(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 125" role="img" aria-labelledby="title">
+  <title id="title">Strawberry Post logo</title>
+  <path fill="#d40000" d="M47.493 16.406h-.984v3.728c11.07 0 34.294 7.402 34.294 34.244 0 12.158-13.776 30.04-34.375 30.04 0 4.804.095 32.964.095 37.365 1.148.315 2.394.522 3.425.522 16.496 0 50.039-39.591 50.039-73.134 0-16.771-12.556-24.974-25.111-28.983-10.601-3.386-14.502-3.149-21.875-3.782-1.823-.157-4.966-.004-5.489-.001z"/>
+  <path fill="#d40000" d="M33.369 30.018c0-2.333.05-8.947.05-11.377-2.77.764-5.245 1.363-8.327 2.44-3.081 1.077-6.163 2.397-9.052 4.015-2.889 1.618-5.585 3.534-7.897 5.803-2.311 2.268-4.237 4.888-5.585 7.916C1.21 41.842.44 45.276.44 49.17c0 3.895.515 7.959 1.45 12.089.934 4.13 2.287 8.325 3.962 12.484 1.676 4.158 3.673 8.28 5.897 12.26 2.223 3.981 4.672 7.822 7.249 11.419 2.578 3.597 5.284 6.95 8.023 9.958 2.738 3.007 3.266 3.985 5.972 6.196 0-15.593.376-82.865.376-83.559z"/>
+  <path fill="#008000" d="M52.49 16.165c-.718.119 3.289-9.73 10.417-13.604.362-.197-4.944-2.895-8.112.552-3.167 3.447-6.702 13.146-7.085 13.087-9.348-1.443-23.091-5.8-30.917 1.366-2.381 2.695 9.079 3.682 9.079 3.682S13.871 23.407 8.538 28.36c5.651 3.619 17.527.673 19.239 1.397-1.905 1.65-7.556 8.19-6.667 9.651 8 1.587 16.382-3.111 21.589-7.873 1.27 5.651 1.84 8.826 3.683 10.794 7.556-3.365 9.841-8.445 11.682-12.509 1.651 4.064 8.763 10.922 20.192 11.112-1.651-9.334-3.304-9.233-6.731-13.97 8.828 4.662 15.783 3.448 21.398 3.683-3.463-5.034-10.793-9.587-22.032-10.032 9.524-3.682 5.573-2.098 13.906-3.873-2.144-3.235-19.887-2.634-32.306-.575z"/>
+</svg>
 )STRAWBERRY_ASSET";
 
 }  // namespace WebAssets

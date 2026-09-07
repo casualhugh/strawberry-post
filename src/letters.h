@@ -36,3 +36,4 @@ size_t lettersWithStatus(LetterStatus status);
 const LetterRecord* letterAt(size_t index);
 const LetterRecord* findLetterById(uint32_t id);
 bool updateLetterStatus(uint32_t id, LetterStatus status);
+bool deleteLetter(uint32_t id);

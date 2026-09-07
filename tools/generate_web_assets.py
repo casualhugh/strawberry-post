@@ -17,9 +17,11 @@ RAW_DELIMITER = "STRAWBERRY_ASSET"
 ASSETS = (
     ("kHomePage", "index.html"),
     ("kLettersPage", "letters.html"),
+    ("kTrackingPage", "track.html"),
     ("kAdminPage", "postie.html"),
     ("kDiagnosticsPage", "diagnostics.html"),
     ("kPublicStyles", "style.css"),
+    ("kLogoSvg", "logo.svg"),
 )
 
 

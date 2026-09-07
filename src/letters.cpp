@@ -301,6 +301,10 @@ void registerLetterRoutes(WebServer& server) {
     recordHttpRequest(server);
     server.send_P(200, "text/html; charset=utf-8", WebAssets::kLettersPage);
   });
+  server.on("/track", HTTP_GET, [&server]() {
+    recordHttpRequest(server);
+    server.send_P(200, "text/html; charset=utf-8", WebAssets::kTrackingPage);
+  });
   server.on("/api/letters", HTTP_POST, [&server]() { handleCreate(server); });
   server.on("/api/letters/status", HTTP_GET,
             [&server]() { handleStatus(server); });
@@ -364,6 +368,37 @@ bool updateLetterStatus(uint32_t id, LetterStatus status) {
       store.records[index].status = previous;
       return false;
     }
+  }
+  return false;
+}
+
+bool deleteLetter(uint32_t id) {
+  for (size_t index = 0; index < store.count; ++index) {
+    if (store.records[index].id != id) {
+      continue;
+    }
+
+    const LetterRecord removed = store.records[index];
+    for (size_t next = index + 1; next < store.count; ++next) {
+      store.records[next - 1] = store.records[next];
+    }
+    --store.count;
+
+    if (persist()) {
+      if (strcmp(lastSubmissionTracking, removed.trackingCode) == 0) {
+        lastSubmissionHash = 0;
+        lastSubmissionAtMs = 0;
+        lastSubmissionTracking[0] = '\0';
+      }
+      return true;
+    }
+
+    for (size_t restore = store.count; restore > index; --restore) {
+      store.records[restore] = store.records[restore - 1];
+    }
+    store.records[index] = removed;
+    ++store.count;
+    return false;
   }
   return false;
 }

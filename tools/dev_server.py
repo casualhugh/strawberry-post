@@ -53,6 +53,7 @@ LETTER_STATUSES = {
 PAGE_FILES = {
     "/": "index.html",
     "/letters": "letters.html",
+    "/track": "track.html",
     "/postie": "postie.html",
     "/postie/diagnostics": "diagnostics.html",
 }
@@ -247,6 +248,14 @@ class MockState:
                     return True
         return False
 
+    def delete_letter(self, record_id: int) -> bool:
+        with self.lock:
+            for index, letter in enumerate(self.letters):
+                if letter["id"] == record_id:
+                    self.letters.pop(index)
+                    return True
+        return False
+
     def moderate(self, collection_name: str, record_id: int, action: str) -> bool:
         with self.lock:
             collection: list[dict[str, Any]] = getattr(self, collection_name)
@@ -377,6 +386,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
         if path == "/style.css":
             self.serve_web_file("style.css", "text/css; charset=utf-8")
             return
+        if path == "/logo.svg":
+            self.serve_web_file("logo.svg", "image/svg+xml")
+            return
         if path == "/api/stats":
             self.send_json(HTTPStatus.OK, self.server.state.stats())
             return
@@ -481,6 +493,19 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     HTTPStatus.BAD_REQUEST, "Valid letter id and status are required"
                 )
             elif not self.server.state.update_letter(record_id, status):
+                self.send_error_json(HTTPStatus.NOT_FOUND, "Letter not found")
+            else:
+                self.send_json(HTTPStatus.OK, {"ok": True})
+            return
+
+        if path == "/api/admin/letters/delete":
+            try:
+                record_id = int(form.get("id", "0"))
+            except ValueError:
+                record_id = 0
+            if record_id <= 0:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, "Valid letter id is required")
+            elif not self.server.state.delete_letter(record_id):
                 self.send_error_json(HTTPStatus.NOT_FOUND, "Letter not found")
             else:
                 self.send_json(HTTPStatus.OK, {"ok": True})

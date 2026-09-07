@@ -29,9 +29,9 @@ Arduino variant defaults.
 | Control | ESP32 GPIO |
 | --- | ---: |
 | Menu button | GPIO 2 |
-| Rotary switch — up | GPIO 6 |
-| Rotary switch — down | GPIO 4 |
-| Rotary switch — select | GPIO 5 |
+| Rotary switch, up | GPIO 6 |
+| Rotary switch, down | GPIO 4 |
+| Rotary switch, select | GPIO 5 |
 | Exit button | GPIO 1 |
 
 ## TF card slot (SPI)
@@ -106,8 +106,8 @@ CrowPanel 5.79-inch E-Paper (272 × 792)
 
 The PlatformIO target now matches the installed ESP32-S3 module and memory.
 Display, input, and TF-card drivers are not yet implemented. Their electrical
-behavior—including button polarity/pull-ups, safe SPI speeds, display
-waveforms/LUTs, refresh behavior, and shutdown sequencing—must be verified
+behavior, including button polarity/pull-ups, safe SPI speeds, display
+waveforms/LUTs, refresh behavior, and shutdown sequencing, must be verified
 against the exact purchased board revision before those drivers are enabled.
 
 ## Hardware references

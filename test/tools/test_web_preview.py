@@ -75,17 +75,23 @@ class WebPreviewTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8").lower()
             self.assertNotIn("http://", content, path.name)
             self.assertNotIn("https://", content, path.name)
+            self.assertNotIn(chr(0x2014), content, path.name)
+            self.assertNotIn("&" + "mdash;", content, path.name)
 
         index = (PROJECT_ROOT / "web" / "index.html").read_text(encoding="utf-8")
         for category in dev_server.NOTICE_CATEGORIES:
             self.assertIn(f"<option>{html.escape(category)}</option>", index)
 
     def test_pages_styles_and_postie_authentication_are_served(self) -> None:
-        for path in ("/", "/letters", "/style.css"):
+        for path in ("/", "/letters", "/track", "/style.css", "/logo.svg"):
             status, body, headers = self.request(path)
             self.assertEqual(200, status, path)
             self.assertGreater(len(body), 100, path)
             self.assertIn("Content-Type", headers)
+
+        status, body, headers = self.request("/logo.svg")
+        self.assertEqual("image/svg+xml", headers["Content-Type"])
+        self.assertIn(b"Strawberry Post logo", body)
 
         status, _, headers = self.request("/postie")
         self.assertEqual(401, status)
@@ -99,6 +105,21 @@ class WebPreviewTests(unittest.TestCase):
         self.assertIn(b"Notice Board", body)
         self.assertIn(b"Missed Connection", body)
         self.assertNotIn(b"A tiny rural postal service", body)
+
+        status, body, _ = self.request("/letters")
+        self.assertEqual(200, status)
+        self.assertIn(b"tracking number", body.lower())
+        self.assertIn(b"first stranger they meet", body)
+        self.assertIn(b"not for a specific person", body)
+        self.assertNotIn(b"Claim ticket", body)
+
+        status, tracking_body, _ = self.request("/track")
+        self.assertEqual(200, status)
+        self.assertIn(b"Track my letter", tracking_body)
+        self.assertIn(b"STRAW-", tracking_body)
+        self.assertIn(b'maxlength="4"', tracking_body)
+        self.assertNotIn(b'id="send"', tracking_body)
+        self.assertNotIn(b'id="track"', body)
 
     def test_notice_board_supports_missed_connection_category(self) -> None:
         status, created = self.request_json(
@@ -168,6 +189,33 @@ class WebPreviewTests(unittest.TestCase):
         self.assertEqual(200, status)
         _, notices = self.request_json("/api/notices")
         self.assertFalse(any(item["id"] == 1 for item in notices["notices"]))
+
+    def test_postie_can_delete_a_letter(self) -> None:
+        status, overview = self.request_json(
+            "/api/admin/overview", headers=self.admin_headers
+        )
+        self.assertEqual(200, status)
+        letter = overview["letters"][0]
+
+        status, _ = self.request_json(
+            "/api/admin/letters/delete",
+            method="POST",
+            form={"id": letter["id"]},
+            headers=self.admin_headers,
+        )
+        self.assertEqual(200, status)
+
+        status, overview = self.request_json(
+            "/api/admin/overview", headers=self.admin_headers
+        )
+        self.assertEqual(200, status)
+        self.assertFalse(any(item["id"] == letter["id"] for item in overview["letters"]))
+
+        status, error = self.request_json(
+            f"/api/letters/status?tracking={letter['tracking']}"
+        )
+        self.assertEqual(404, status)
+        self.assertIn("error", error)
 
     def test_form_limits_and_errors_match_firmware_shape(self) -> None:
         status, error = self.request_json(

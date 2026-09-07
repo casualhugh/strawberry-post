@@ -42,5 +42,10 @@ void registerPublicUiRoutes(WebServer& server) {
     server.sendHeader("Cache-Control", "public, max-age=3600");
     server.send_P(200, "text/css; charset=utf-8", WebAssets::kPublicStyles);
   });
+  server.on("/logo.svg", HTTP_GET, [&server]() {
+    recordHttpRequest(server);
+    server.sendHeader("Cache-Control", "public, max-age=3600");
+    server.send_P(200, "image/svg+xml", WebAssets::kLogoSvg);
+  });
   server.on("/api/stats", HTTP_GET, [&server]() { sendStats(server); });
 }

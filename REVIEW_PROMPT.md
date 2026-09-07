@@ -49,10 +49,10 @@ Public features:
 
 1. Notice Board, which is the landing page and includes a fixed category list;
    `Missed Connection` is a suggested category rather than a separate feature
-2. Digital Letters
+2. Letters submitted online for physical delivery by the Postie
 
 An unlinked, authenticated Postie interface reads private letters, changes
-their status, and moderates public content.
+their status, permanently deletes letters, and moderates public content.
 
 Use an embedded-suitable architecture: Arduino, `WiFi.h`, a lightweight HTTP
 server, `DNSServer`, LittleFS for persistent internal data, bounded structures,
@@ -70,15 +70,18 @@ Network goals:
 - deliberately local/short-range installation, with radio tuning deferred
 - no user accounts
 
-UI goals: mobile-first, readable outdoors, lightweight, and styled as a small
-Australian rural postal service using red, cream, paper, and cork tones.
+UI goals: mobile-first, readable outdoors, and lightweight. The setting is the
+Strawberry Fields music festival beside the river on the NSW/Victoria border.
+The visual language is a temporary festival post office: river-country colour,
+festival signage, paper claim tickets, and a timber-and-cork community board.
+It must not invent a strawberry-farm or "patch" setting.
 
 Notice records require stable IDs, a server-validated category, message,
 creation/expiry data, and moderation state. They default to about eight hours.
 No NTP/RTC can be assumed, so uptime expiry is acceptable if its limitations
 are explicit and future time improvement remains possible.
 
-Digital Letters require ID, human-friendly tracking code, recipient, likely
+Letters require ID, human-friendly tracking code, recipient, likely
 location, private message, optional sender, creation data, and one status:
 
 - `Waiting`
@@ -114,33 +117,33 @@ the internal persistent-data store.
 Stages 0–10 are implemented and under review. Stage 11 is forbidden unless
 separately authorized.
 
-- **Stage 0 — Baseline:** inspect `platformio.ini`, identify environment/board/
+- **Stage 0: Baseline:** inspect `platformio.ini`, identify environment/board/
   framework, and prove the untouched project builds from the CLI.
-- **Stage 1 — AP/minimal HTTP:** AP startup, deterministic IP, `GET /`, minimal
+- **Stage 1: AP/minimal HTTP:** AP startup, deterministic IP, `GET /`, minimal
   running page, and serial startup/IP state. No storage or forms.
-- **Stage 2 — DNS/captive groundwork:** wildcard DNS, useful mobile/desktop
+- **Stage 2: DNS/captive groundwork:** wildcard DNS, useful mobile/desktop
   connectivity probes, and direct homepage access without relying on a popup.
-- **Stage 3 — Persistence foundation:** LittleFS startup, safe read/write
+- **Stage 3: Persistence foundation:** LittleFS startup, safe read/write
   helpers, and a reboot-surviving persistence proof.
-- **Stage 4 — Notice Board:** persistent `GET/POST /api/notices`, required
+- **Stage 4: Notice Board:** persistent `GET/POST /api/notices`, required
   category/message, validation, capacity, expiry, and basic UI.
-- **Stage 5 — Missed Connections:** originally implemented as a separate
+- **Stage 5: Missed Connections:** originally implemented as a separate
   persistent feature, then deliberately folded into the Notice Board as the
   `Missed Connection` category. The obsolete store, API, page, and moderation
   route should be absent from the current product. There is no deployed data or
   backward-compatibility requirement.
-- **Stage 6 — Digital Letters:** persistent `POST /api/letters`, unique friendly
+- **Stage 6: Letters:** persistent `POST /api/letters`, unique friendly
   tracking codes, and public status-only lookup.
-- **Stage 7 — Postie/Admin:** authenticated private letter workflow, all status
+- **Stage 7: Postie/Admin:** authenticated private letter workflow, all status
   changes, and hide/unhide/delete moderation. No public admin link.
-- **Stage 8 — Public UI:** proper mobile pages, local assets only, and derived
+- **Stage 8: Public UI:** proper mobile pages, local assets only, and derived
   postal statistics.
-- **Stage 9 — Reliability:** input and record limits, empty/malformed handling,
+- **Stage 9: Reliability:** input and record limits, empty/malformed handling,
   encoding, pruning, duplicate taps, full/corrupt storage behavior, watchdog/
   heap/stack friendliness, and useful diagnostics.
-- **Stage 10 — Load-test preparation:** AP-client, request, heap, storage, and
+- **Stage 10: Load-test preparation:** AP-client, request, heap, storage, and
   record diagnostics; prepare for rather than assume multi-phone success.
-- **Stage 11 — Display:** not begun. There must be no e-ink/display dependency,
+- **Stage 11: Display:** not begun. There must be no e-ink/display dependency,
   code, pin configuration, layout, refresh, or power behavior.
 
 Every stage was required to build before the next and remain a separate commit.
@@ -229,8 +232,9 @@ titles.
 - Assess open AP, plaintext Basic Auth, default password, browser caching,
   brute force, CSRF, missing logout, and deployment guard against the stated
   offline trust model.
-- Review plaintext-at-rest letters, no explicit letter deletion/expiry, capacity
-  eviction, and operator retention needs.
+- Review plaintext-at-rest letters, deliberate manual deletion with no
+  time-based expiry, capacity eviction, deletion rollback, and operator
+  retention needs.
 - Evaluate the 10,000-code namespace, enumeration, reuse after pruning, and old
   codes later referring to new letters.
 - Assess permitted status transitions and moderation error semantics.
@@ -294,7 +298,7 @@ titles.
   and public/private data separation. Treat the mock as UI/API evidence only.
 - Confirm there is still no hardware, captive, real LittleFS power-cut, soak,
   or multi-phone test evidence.
-- Evaluate—not implement—the SD asset proposal. LittleFS should remain internal
+- Evaluate the SD asset proposal, but do not implement it. LittleFS should remain internal
   data storage; laptop-editable SD should use FAT/FAT32 through `SD`/`SD_MMC`.
   Assess boot-only read, PSRAM cache, manifest/hash/size validation, read-only
   operation, embedded fallback, all-or-nothing bundle selection, missing card,

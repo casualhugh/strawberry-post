@@ -4,27 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Notice Board | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
-<body>
+<body class="public-page">
   <main>
-    <h1>Strawberry Post</h1>
-    <p>Community notices and local letters, available here without internet.</p>
+    <header class="brand">
+      <img class="brand-logo" src="/logo.svg?v=8" alt="" width="72" height="90">
+      <div class="brand-copy">
+        <p class="eyebrow">Strawberry Fields &bull; NSW &#8596; VIC</p>
+        <h1>Strawberry Post</h1>
+        <p>Welcome to Strawberry Post Office.</p>
+      </div>
+    </header>
+
+    <div class="river-rule" aria-hidden="true"></div>
 
     <section class="board-heading">
       <div>
+        <p class="section-kicker">The festival wire</p>
         <h2>Notice Board</h2>
-        <p>See what people nearby have shared.</p>
+        <p>The festival grapevine, now with fewer rumours and more readable handwriting.</p>
       </div>
-      <a class="letter-link" href="/letters">Send or track a letter</a>
+      <div class="letter-actions">
+        <a class="letter-link" href="/letters">Send a letter</a>
+        <a class="letter-link letter-link-secondary" href="/track">Track a letter</a>
+      </div>
     </section>
 
-    <section id="posts" aria-label="Current notices">
-      <p class="hint">Loading notices&hellip;</p>
+    <section id="posts" class="notice-board" aria-label="Current notices">
+      <p class="hint">Checking the pigeon holes...</p>
     </section>
 
     <section class="post-form" aria-labelledby="post-heading">
+      <p class="section-kicker">Add to the board</p>
       <h2 id="post-heading">Pin a notice</h2>
+      <p>Pin something useful, weird or urgently needed. Keep it vague enough for a stranger to recognise.</p>
       <form id="notice-form">
         <label>Category
           <select name="category" required>
@@ -38,7 +52,6 @@
             <option>For Sale / Swap</option>
           </select>
         </label>
-        <p class="hint">Looking for someone you met? Choose &ldquo;Missed Connection&rdquo;.</p>
         <label>Message
           <textarea name="message" maxlength="512" required></textarea>
         </label>
@@ -47,13 +60,15 @@
       <p id="result" role="status"></p>
     </section>
 
-    <p id="delivery-status" class="status" aria-live="polite">Loading delivery status&hellip;</p>
-    <section class="stats" aria-label="Postal statistics">
-      <div class="stat"><strong id="notices-active">&ndash;</strong>active notices</div>
-      <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
-      <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
-    </section>
-    <p class="hint">Connected to STRAWBERRY POST &mdash; no internet needed.</p>
+    <footer class="station-footer">
+      <p id="delivery-status" class="status" aria-live="polite">Checking the pigeon holes...</p>
+      <section class="stats" aria-label="Postal statistics">
+        <div class="stat"><strong id="notices-active">&ndash;</strong>active notices</div>
+        <div class="stat"><strong id="letters-waiting">&ndash;</strong>waiting letters</div>
+        <div class="stat"><strong id="letters-delivered">&ndash;</strong>delivered</div>
+      </section>
+      <p class="connection-note">Yeah nah, there&rsquo;s no internet here. We&rsquo;re out in woop woop.</p>
+    </footer>
   </main>
   <script>
     const posts = document.querySelector('#posts');
@@ -71,12 +86,13 @@
       const response = await fetch('/api/notices');
       const data = await response.json();
       if (!data.notices.length) {
-        posts.replaceChildren(element('p', 'No notices yet. Be the first to pin one.'));
+        posts.replaceChildren(element('p', 'Nothing pinned yet. Either everyone is being very sensible, or they are still asleep.'));
         return;
       }
       posts.replaceChildren(...data.notices.map(notice => {
         const article = document.createElement('article');
         article.className = 'post';
+        article.dataset.category = notice.category;
         article.append(element('strong', notice.category), element('p', notice.message));
         return article;
       }));
@@ -86,7 +102,7 @@
       const response = await fetch('/api/stats');
       const stats = await response.json();
       const out = stats.lettersOutForDelivery;
-      text('#delivery-status', `${out} ${out === 1 ? 'letter' : 'letters'} currently out for delivery`);
+      text('#delivery-status', `${out} ${out === 1 ? 'letter' : 'letters'} out for delivery. The Postie has likely gone walkabout.`);
       text('#letters-waiting', stats.lettersWaiting);
       text('#letters-delivered', stats.lettersDelivered);
       text('#notices-active', stats.noticesActive);
@@ -101,7 +117,7 @@
         body: new URLSearchParams(new FormData(form))
       });
       const data = await response.json();
-      result.textContent = response.ok ? 'Your notice is now on the board.' : data.error;
+      result.textContent = response.ok ? 'Notice accepted. Someone will probably read that.' : data.error;
       if (response.ok) {
         form.reset();
         await Promise.all([loadNotices(), loadStats()]);
@@ -109,7 +125,7 @@
     });
 
     Promise.all([loadNotices(), loadStats()]).catch(() => {
-      result.textContent = 'The board is temporarily unavailable.';
+      result.textContent = 'The sorting room is having a little lie-down. Try again shortly.';
     });
   </script>
 </body>

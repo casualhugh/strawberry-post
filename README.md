@@ -16,19 +16,22 @@ display and input drivers remain deferred.
 
 The public application has two services:
 
-1. **Notice Board** — the landing experience for short-lived public notices.
+1. **Notice Board:** the landing experience for short-lived public notices.
    Categories are selected from a fixed list; `Missed Connection` is one of
    those categories and is suggested to people looking for someone they met.
-2. **Digital Letters** — private messages submitted to the Postie and tracked
-   publicly by status only.
+2. **Letters:** private messages submitted online, physically carried by the
+   Postie, and tracked publicly by status only.
 
 The unlinked Postie interface allows an authenticated operator to read private
-letters, update delivery status, and moderate public posts.
+letters, update delivery status, permanently delete letters, and moderate
+public posts.
 
-The visual language is a small fictional Australian rural post office: red,
-cream, paper, and cork tones; large mobile controls; no external fonts, CDNs,
-or JavaScript frameworks. All current web assets are compiled into program
-flash (`PROGMEM`) so the public shell remains available if data storage fails.
+The visual language is a temporary riverside post office inside the Strawberry
+Fields music festival on the NSW/Victoria border. It combines festival signage,
+river-country colours, paper claim tickets, and a timber-and-cork community
+board. It uses large mobile controls with no external fonts, CDNs, or JavaScript
+frameworks. All current web assets are compiled into program flash (`PROGMEM`)
+so the public shell remains available if data storage fails.
 
 ### Network behavior
 
@@ -54,7 +57,7 @@ emoji before the server applies its byte limit.
 | Record | Fields | Current capacity and limits |
 | --- | --- | --- |
 | Notice | ID, category, message, creation/expiry uptime, boot ID, hidden flag | 32 records; category 32 bytes; message 512 bytes; about 8 hours |
-| Digital letter | ID, tracking code, recipient, likely location, private message, optional sender, creation data, status | 32 records; recipient 160 bytes; location 96 bytes; message 768 bytes; sender 96 bytes |
+| Letter | ID, tracking code, recipient, likely location, private message, optional sender, creation data, status | 32 records; recipient 160 bytes; location 96 bytes; message 768 bytes; sender 96 bytes |
 
 New notices must use one of: `General`, `Missed Connection`, `Lost & Found`,
 `Event / Schedule`, `Ride Share`, `Help Wanted`, or `For Sale / Swap`. The
@@ -105,27 +108,27 @@ Phones
 
 Important modules:
 
-- `src/app_config.h` — deployment and resource limits.
-- `src/main.cpp` — startup ordering and cooperative main loop.
-- `src/wifi_manager.*` — deterministic SoftAP configuration.
-- `src/dns_server.*` — wildcard local DNS.
-- `src/web_server.*` — server setup, captive routes, and fallback routing.
-- `src/public_ui.*` — public asset routes and statistics.
-- `web/` — canonical, human-readable HTML/CSS/JavaScript sources.
-- `tools/generate_web_assets.py` — deterministic PROGMEM bundle generator,
+- `src/app_config.h`: deployment and resource limits.
+- `src/main.cpp`: startup ordering and cooperative main loop.
+- `src/wifi_manager.*`: deterministic SoftAP configuration.
+- `src/dns_server.*`: wildcard local DNS.
+- `src/web_server.*`: server setup, captive routes, and fallback routing.
+- `src/public_ui.*`: public asset routes and statistics.
+- `web/`: canonical, human-readable HTML/CSS/JavaScript sources.
+- `tools/generate_web_assets.py`: deterministic PROGMEM bundle generator,
   invoked automatically by the ESP32 build.
-- `tools/dev_server.py` — standard-library desktop server and in-memory API mock.
-- `src/generated_web_assets.*` — generated firmware asset declarations/data;
+- `tools/dev_server.py`: standard-library desktop server and in-memory API mock.
+- `src/generated_web_assets.*`: generated firmware asset declarations/data;
   never edit these files directly.
-- `src/notices.*` — notice model, persistence, routes, and moderation hooks.
-- `src/letters.*` — private letters, tracking, status, and admin hooks.
-- `src/admin.*` — Basic-authenticated Postie UI and APIs.
-- `src/storage.*` — LittleFS mounting and replacement/recovery helpers.
-- `src/storage_format.h` — readable application file-signature construction.
-- `src/web_utils.*` — JSON escaping, UTF-8 validation, request policy, and
+- `src/notices.*`: notice model, persistence, routes, and moderation hooks.
+- `src/letters.*`: private letters, tracking, status, and admin hooks.
+- `src/admin.*`: Basic-authenticated Postie UI and APIs.
+- `src/storage.*`: LittleFS mounting and replacement/recovery helpers.
+- `src/storage_format.h`: readable application file-signature construction.
+- `src/web_utils.*`: JSON escaping, UTF-8 validation, request policy, and
   duplicate-submission hashing.
-- `src/diagnostics.*` — request counters and runtime health reporting.
-- `lib/strawberry_core/` — allocation-free C++11 domain and storage algorithms
+- `src/diagnostics.*`: request counters and runtime health reporting.
+- `lib/strawberry_core/`: allocation-free C++11 domain and storage algorithms
   shared by firmware and desktop tests, with no Arduino dependency.
 
 The HTTP server is intentionally synchronous. Several phones can remain
@@ -146,9 +149,9 @@ readable in code instead of duplicating unexplained hexadecimal constants.
 
 Current files are:
 
-- `/system.dat` — `STPS`, schema 1
-- `/notices.dat` — `NOTC`, schema 1
-- `/letters.dat` — `LETR`, schema 1
+- `/system.dat`: `STPS`, schema 1
+- `/notices.dat`: `NOTC`, schema 1
+- `/letters.dat`: `LETR`, schema 1
 
 Files are native fixed C++ binary snapshots. That is compact and bounded, but
 it couples data compatibility to struct layout, capacity, compiler ABI, and
@@ -176,6 +179,12 @@ The notice store prunes its oldest record when full. A full letter store prunes
 the oldest completed/failed letter; if all 32 letters are still active, a new
 letter is rejected.
 
+Letters have no time-based expiry. The Postie decides when a letter is no
+longer needed and can permanently delete it from the sorting room. Public
+tracking for a deleted letter immediately returns not found. Tracking numbers
+remain four digits because the expected three-day festival volume is well
+within the available 10,000-code namespace.
+
 ## Security and privacy model
 
 This is an offline festival installation, not a high-security service:
@@ -200,8 +209,10 @@ admin endpoint.
 | --- | --- | --- |
 | GET | `/` | Notice Board landing page, posting form, and derived summary |
 | GET | `/style.css` | Flash-resident public stylesheet |
+| GET | `/logo.svg` | Flash-resident Strawberry Post logo |
 | GET/POST | `/api/notices` | List/create notices |
-| GET | `/letters` | Letter submission and tracking page |
+| GET | `/letters` | Private letter-writing postcard page |
+| GET | `/track` | Public tracking-number lookup page |
 | POST | `/api/letters` | Create a private letter |
 | GET | `/api/letters/status?tracking=...` | Public status-only tracking |
 | GET | `/api/stats` | Derived public statistics |
@@ -209,6 +220,7 @@ admin endpoint.
 | GET | `/postie/diagnostics` | Authenticated diagnostics page |
 | GET | `/api/admin/overview` | Private letters and moderation data |
 | POST | `/api/admin/letters/status` | Change letter status |
+| POST | `/api/admin/letters/delete` | Permanently delete a letter |
 | POST | `/api/admin/notices/moderate` | Hide/unhide/delete a notice |
 | GET | `/api/admin/diagnostics` | Runtime diagnostic JSON |
 
@@ -411,7 +423,7 @@ separate reviewable commit.
 | 3 | LittleFS foundation and persistence proof | Complete |
 | 4 | Persistent Notice Board API, expiry, validation, basic UI | Complete |
 | 5 | Persistent Missed Connections API and basic UI | Complete historically; later merged into Notice Board categories |
-| 6 | Private Digital Letters and status-only tracking | Complete |
+| 6 | Private Letters and status-only tracking | Complete |
 | 7 | Authenticated Postie workflow and moderation | Complete |
 | 8 | Proper mobile public UI and derived statistics | Complete |
 | 9 | Reliability, limits, encoding, pruning, duplicate handling | Complete; hardware verification pending |
@@ -423,8 +435,7 @@ display module belong in the project yet.
 
 ## Recommended next work, excluding display
 
-1. Install a current host compiler, run the checked-in native suites, and add
-   them to CI so a missing local compiler cannot leave them unexecuted.
+1. Add the native, web-preview, generated-asset, and ESP32 build checks to CI.
 2. Extend the domain seam to cover full-store pruning, exact duplicate payload
    comparison, statistics, and complete mutation rollback.
 3. Pin the known-good PlatformIO platform/framework versions for reproducible
@@ -433,13 +444,9 @@ display module belong in the project yet.
    to persistent formats.
 5. Decide whether reboot-extended public expiry is acceptable; otherwise add an
    admin-set festival clock or battery-backed RTC.
-6. Add a deployment guard that refuses Postie access while the default password
-   remains configured.
-7. Decide letter retention/deletion policy and whether tracking codes need a
-   larger, less enumerable namespace.
-8. Prototype the read-only SD asset provider behind a compile-time flag after
+6. Prototype the read-only SD asset provider behind a compile-time flag after
    choosing the exact card hardware and wiring.
-9. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
+7. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
    `.local` is commonly treated as mDNS-special.
-10. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
+8. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
    hardware tests while watching protected diagnostics.

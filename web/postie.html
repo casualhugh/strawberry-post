@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Postie | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
 <body class="admin">
   <main>
@@ -52,18 +52,23 @@
       const data = await response.json();
 
       const letters = document.querySelector('#letters');
-      letters.replaceChildren(...data.letters.map(letter => {
+      if (!data.letters.length) {
+        letters.replaceChildren(element('p', 'No letters waiting. Either everyone is organised, or nobody has found the post office.'));
+      } else {
+        letters.replaceChildren(...data.letters.map(letter => {
         const card = element('details', undefined, 'card');
         if (letter.status === 'Waiting') card.open = true;
-        card.append(element('summary', `${letter.tracking} — ${letter.recipient} — ${letter.status}`));
+        card.append(element('summary', `${letter.tracking} | ${letter.recipient} | ${letter.status}`));
         const details = element('dl', undefined, 'private');
         [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
           .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
         card.append(details);
         ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
           card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
+        card.append(actionButton('Delete', () => post('/api/admin/letters/delete', {id: letter.id}), 'alt'));
         return card;
-      }));
+        }));
+      }
 
       const notices = document.querySelector('#notices');
       notices.replaceChildren(...data.notices.map(notice => {

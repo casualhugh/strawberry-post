@@ -115,6 +115,29 @@ void handleLetterStatus(WebServer& server) {
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
+void handleLetterDelete(WebServer& server) {
+  recordHttpRequest(server);
+  if (!authenticate(server)) return;
+  if (!formRequestWithinLimits(server)) {
+    sendError(server, 413, F("Request is too large"));
+    return;
+  }
+  const uint32_t id = server.arg("id").toInt();
+  if (id == 0) {
+    sendError(server, 400, F("Valid letter id is required"));
+    return;
+  }
+  if (!findLetterById(id)) {
+    sendError(server, 404, F("Letter not found"));
+    return;
+  }
+  if (!deleteLetter(id)) {
+    sendError(server, 507, F("Could not delete letter"));
+    return;
+  }
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
 void handleNoticeModeration(WebServer& server) {
   recordHttpRequest(server);
   if (!authenticate(server)) return;
@@ -165,6 +188,8 @@ void registerAdminRoutes(WebServer& server) {
             [&server]() { handleOverview(server); });
   server.on("/api/admin/letters/status", HTTP_POST,
             [&server]() { handleLetterStatus(server); });
+  server.on("/api/admin/letters/delete", HTTP_POST,
+            [&server]() { handleLetterDelete(server); });
   server.on("/api/admin/notices/moderate", HTTP_POST,
             [&server]() { handleNoticeModeration(server); });
 }

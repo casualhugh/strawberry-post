@@ -7,8 +7,10 @@ namespace WebAssets {
 
 extern const char kHomePage[] PROGMEM;
 extern const char kLettersPage[] PROGMEM;
+extern const char kTrackingPage[] PROGMEM;
 extern const char kAdminPage[] PROGMEM;
 extern const char kDiagnosticsPage[] PROGMEM;
 extern const char kPublicStyles[] PROGMEM;
+extern const char kLogoSvg[] PROGMEM;
 
 }  // namespace WebAssets

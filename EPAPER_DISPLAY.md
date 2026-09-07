@@ -84,3 +84,28 @@ the CrowPanel before festival use.
 
 Official reference:
 [Elecrow CrowPanel 5.79-inch repository](https://github.com/Elecrow-RD/CrowPanel-ESP32-5.79-E-paper-HMI-Display-with-272-792).
+
+## Regenerating the mockup
+
+Install the development-only Python packages, then run the renderer from the
+repository root:
+
+```powershell
+py -3 -m pip install -r requirements-dev.txt
+py -3 tools/render_epaper_mockup.py
+```
+
+The renderer downloads `EPDfont.h` from the exact Elecrow commit used for the
+design and verifies its SHA-256 checksum before using it. For an offline run,
+provide a local copy of that same file:
+
+```powershell
+py -3 tools/render_epaper_mockup.py --font-header path\to\EPDfont.h
+```
+
+Use `--check` to compare a fresh render with the committed PNG without changing
+the file:
+
+```powershell
+py -3 tools/render_epaper_mockup.py --check
+```

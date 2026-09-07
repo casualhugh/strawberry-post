@@ -438,15 +438,13 @@ display module belong in the project yet.
 1. Add the native, web-preview, generated-asset, and ESP32 build checks to CI.
 2. Extend the domain seam to cover full-store pruning, exact duplicate payload
    comparison, statistics, and complete mutation rollback.
-3. Pin the known-good PlatformIO platform/framework versions for reproducible
-   builds.
-4. Add checksums/generation metadata and explicit migration/recovery behavior
+3. Add checksums/generation metadata and explicit migration/recovery behavior
    to persistent formats.
-5. Decide whether reboot-extended public expiry is acceptable; otherwise add an
+4. Decide whether reboot-extended public expiry is acceptable; otherwise add an
    admin-set festival clock or battery-backed RTC.
-6. Prototype the read-only SD asset provider behind a compile-time flag after
+5. Prototype the read-only SD asset provider behind a compile-time flag after
    choosing the exact card hardware and wiring.
-7. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
+6. Test whether `.local` is reliable with wildcard unicast DNS on target phones;
    `.local` is commonly treated as mDNS-special.
-8. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
+7. Perform power-cut, storage-corruption, captive-device, soak, and 1/2/4/8-phone
    hardware tests while watching protected diagnostics.

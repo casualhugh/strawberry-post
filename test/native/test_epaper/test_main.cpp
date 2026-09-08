@@ -42,9 +42,72 @@ void test_wrap_prefers_word_boundaries_and_advances() {
 }
 
 void test_rotation_handles_empty_and_wraps() {
+  TEST_ASSERT_EQUAL_UINT(0, EpaperCore::previousNoticeIndex(3, 0));
+  TEST_ASSERT_EQUAL_UINT(2, EpaperCore::previousNoticeIndex(0, 3));
+  TEST_ASSERT_EQUAL_UINT(0, EpaperCore::previousNoticeIndex(1, 3));
   TEST_ASSERT_EQUAL_UINT(0, EpaperCore::nextNoticeIndex(3, 0));
   TEST_ASSERT_EQUAL_UINT(2, EpaperCore::nextNoticeIndex(1, 3));
   TEST_ASSERT_EQUAL_UINT(0, EpaperCore::nextNoticeIndex(2, 3));
+}
+
+void test_wifi_qr_follows_three_notice_slots_and_persists_when_empty() {
+  EpaperCore::RotationState frame{0, 1, false};
+  frame = EpaperCore::nextAutomaticFrame(frame, 5, 3);
+  TEST_ASSERT_FALSE(frame.wifiQr);
+  TEST_ASSERT_EQUAL_UINT(1, frame.noticeIndex);
+  TEST_ASSERT_EQUAL_UINT16(2, frame.noticeSlotsShown);
+  frame = EpaperCore::nextAutomaticFrame(frame, 5, 3);
+  TEST_ASSERT_FALSE(frame.wifiQr);
+  TEST_ASSERT_EQUAL_UINT(2, frame.noticeIndex);
+  TEST_ASSERT_EQUAL_UINT16(3, frame.noticeSlotsShown);
+  frame = EpaperCore::nextAutomaticFrame(frame, 5, 3);
+  TEST_ASSERT_TRUE(frame.wifiQr);
+  TEST_ASSERT_EQUAL_UINT(2, frame.noticeIndex);
+  frame = EpaperCore::nextAutomaticFrame(frame, 5, 3);
+  TEST_ASSERT_FALSE(frame.wifiQr);
+  TEST_ASSERT_EQUAL_UINT(3, frame.noticeIndex);
+  TEST_ASSERT_EQUAL_UINT16(1, frame.noticeSlotsShown);
+
+  frame = EpaperCore::nextAutomaticFrame(frame, 0, 3);
+  TEST_ASSERT_TRUE(frame.wifiQr);
+  TEST_ASSERT_EQUAL_UINT(0, frame.noticeIndex);
+  frame = EpaperCore::nextAutomaticFrame(frame, 0, 3);
+  TEST_ASSERT_TRUE(frame.wifiQr);
+}
+
+void test_zero_qr_cadence_disables_only_periodic_frames() {
+  const EpaperCore::RotationState notice =
+      EpaperCore::nextAutomaticFrame({1, UINT16_MAX, false}, 3, 0);
+  TEST_ASSERT_FALSE(notice.wifiQr);
+  TEST_ASSERT_EQUAL_UINT(2, notice.noticeIndex);
+  TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, notice.noticeSlotsShown);
+  TEST_ASSERT_TRUE(EpaperCore::nextAutomaticFrame(notice, 0, 0).wifiQr);
+}
+
+void test_button_debounce_emits_only_a_stable_press_edge() {
+  EpaperCore::DebouncedButton button{};
+  EpaperCore::initializeButton(button, false, 100);
+
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, true, 110, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, false, 120, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, true, 125, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, true, 154, 30));
+  TEST_ASSERT_TRUE(EpaperCore::buttonPressed(button, true, 155, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, true, 200, 30));
+
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, false, 210, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, false, 240, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, true, 250, 30));
+  TEST_ASSERT_TRUE(EpaperCore::buttonPressed(button, true, 280, 30));
+  TEST_ASSERT_FALSE(EpaperCore::buttonPressed(button, true, 320, 30));
+}
+
+void test_button_debounce_handles_millis_wraparound() {
+  EpaperCore::DebouncedButton button{};
+  EpaperCore::initializeButton(button, false, UINT32_MAX - 20);
+  TEST_ASSERT_FALSE(
+      EpaperCore::buttonPressed(button, true, UINT32_MAX - 10, 30));
+  TEST_ASSERT_TRUE(EpaperCore::buttonPressed(button, true, 19, 30));
 }
 
 void test_refresh_policy_skips_identical_frames_and_periodically_cleans() {
@@ -73,6 +136,10 @@ void test_snapshot_hash_changes_with_displayed_content() {
   ++second.delivered;
   TEST_ASSERT_NOT_EQUAL(EpaperCore::snapshotHash(first),
                         EpaperCore::snapshotHash(second));
+  second = first;
+  second.wifiQr = 1;
+  TEST_ASSERT_NOT_EQUAL(EpaperCore::snapshotHash(first),
+                        EpaperCore::snapshotHash(second));
 }
 
 }  // namespace
@@ -83,6 +150,10 @@ int main(int, char**) {
   RUN_TEST(test_sanitizer_is_bounded_and_terminated);
   RUN_TEST(test_wrap_prefers_word_boundaries_and_advances);
   RUN_TEST(test_rotation_handles_empty_and_wraps);
+  RUN_TEST(test_wifi_qr_follows_three_notice_slots_and_persists_when_empty);
+  RUN_TEST(test_zero_qr_cadence_disables_only_periodic_frames);
+  RUN_TEST(test_button_debounce_emits_only_a_stable_press_edge);
+  RUN_TEST(test_button_debounce_handles_millis_wraparound);
   RUN_TEST(test_refresh_policy_skips_identical_frames_and_periodically_cleans);
   RUN_TEST(test_snapshot_hash_changes_with_displayed_content);
   return UNITY_END();

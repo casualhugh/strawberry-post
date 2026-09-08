@@ -105,6 +105,26 @@ void test_duplicate_window_is_exact_and_wrap_safe() {
       hash, hash, UINT32_C(1), UINT32_C(0xfffffffe), 5));
 }
 
+void test_clock_backfill_preserves_current_boot_age_and_resets_old_boots() {
+  TEST_ASSERT_EQUAL_UINT64(
+      UINT64_C(1700000900), StrawberryCore::backfillCreationEpochSeconds(
+                                UINT64_C(1700001000), 250000, 150000, true));
+  TEST_ASSERT_EQUAL_UINT64(
+      UINT64_C(1700001000), StrawberryCore::backfillCreationEpochSeconds(
+                                UINT64_C(1700001000), 250000, 150000, false));
+  TEST_ASSERT_EQUAL_UINT64(
+      UINT64_C(1700000997), StrawberryCore::backfillCreationEpochSeconds(
+                                UINT64_C(1700001000), 999, UINT32_MAX - 2000,
+                                true));
+}
+
+void test_record_age_requires_a_known_non_future_creation_time() {
+  TEST_ASSERT_FALSE(StrawberryCore::recordAgeReached(200, 0, 100));
+  TEST_ASSERT_FALSE(StrawberryCore::recordAgeReached(200, 201, 100));
+  TEST_ASSERT_FALSE(StrawberryCore::recordAgeReached(200, 101, 100));
+  TEST_ASSERT_TRUE(StrawberryCore::recordAgeReached(200, 100, 100));
+}
+
 struct OccupiedCodes {
   const char** codes;
   size_t count;
@@ -233,6 +253,8 @@ int main(int, char**) {
   RUN_TEST(test_utf8_rejects_malformed_sequences_and_controls);
   RUN_TEST(test_submission_hash_is_deterministic_and_field_separated);
   RUN_TEST(test_duplicate_window_is_exact_and_wrap_safe);
+  RUN_TEST(test_clock_backfill_preserves_current_boot_age_and_resets_old_boots);
+  RUN_TEST(test_record_age_requires_a_known_non_future_creation_time);
   RUN_TEST(test_tracking_format_and_wraparound_allocation);
   RUN_TEST(test_tracking_exhaustion_does_not_change_cursor_result);
   RUN_TEST(test_compaction_commits_stable_order_once);

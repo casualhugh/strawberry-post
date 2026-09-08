@@ -16,6 +16,14 @@ uint32_t appendSubmissionHash(uint32_t hash, const char* bytes, size_t length);
 bool recentlySubmitted(uint32_t hash, uint32_t previousHash, uint32_t nowMs,
                        uint32_t previousTimeMs, uint32_t windowMs);
 
+uint64_t backfillCreationEpochSeconds(uint64_t currentEpochSeconds,
+                                      uint32_t currentUptimeMs,
+                                      uint32_t creationUptimeMs,
+                                      bool createdThisBoot);
+bool recordAgeReached(uint64_t currentEpochSeconds,
+                      uint64_t creationEpochSeconds,
+                      uint64_t lifetimeSeconds);
+
 constexpr char kTrackingPrefix[] = "STRAW-";
 constexpr size_t kTrackingPrefixBytes = sizeof(kTrackingPrefix) - 1;
 constexpr size_t kTrackingDigitCount = 4;
@@ -49,8 +57,9 @@ using CompactionCommit = bool (*)(void* context);
 
 // Stable-compacts records selected by shouldRemove, then calls commit exactly
 // once. A failed commit restores both the original record order and count.
-// The 64-record bound keeps rollback metadata in one uint64_t; all current
-// Strawberry Post stores are deliberately capped at 32 records.
+// The 64-record bound keeps rollback metadata in one uint64_t. This helper is
+// retained for bounded in-memory transactional workflows; persistent record
+// capacity is no longer tied to the working-cache size.
 CompactionResult compactRecordsTransactional(
     void* records, uint16_t& count, size_t recordSize,
     RecordPredicate shouldRemove, void* predicateContext,

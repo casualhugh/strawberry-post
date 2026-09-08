@@ -14,6 +14,7 @@ bool dnsRunning = false;
 
 bool startDnsServer() {
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+  dnsServer.setTTL(AppConfig::kDnsTtlSeconds);
   dnsRunning = dnsServer.start(AppConfig::kDnsPort, "*", AppConfig::kApIp);
 
   if (dnsRunning) {

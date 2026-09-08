@@ -32,10 +32,18 @@ separate footer count.
 
 - Show one active public notice at a time.
 - Advance to the next notice every 30 seconds.
+- After every three notice slots, show a dedicated open-Wi-Fi QR frame for one
+  30-second slot. The cadence is the easily changed
+  `AppConfig::kEpaperNoticeSlotsPerWifiQr`; zero disables periodic QR frames.
+- With no active notices, keep the Wi-Fi QR frame on screen. It encodes the open
+  `STRAWBERRY POST no internet` network; the frame also tells users to open
+  `post.local` after joining.
+- GPIO 6 (UP) selects the previous notice and GPIO 4 (DOWN) selects the next.
+  Button presses are debounced, wrap at either end, and restart the automatic
+  rotation interval. They are harmless when the board is empty.
 - Preserve stable ordering while the notice set remains unchanged.
 - Pick up new notices and postal count changes at the next scheduled refresh.
 - With one notice, refresh only when content or counts change.
-- With no active notices, show the approved empty-board message.
 - Do not refresh the physical panel when the next framebuffer is identical.
 
 ## Font and input handling
@@ -81,11 +89,15 @@ the cooperative HTTP/DNS loop; yielding only services background runtime work.
 
 - Confirm orientation and addressing across both SSD1683 halves.
 - Confirm BUSY and display-power polarity.
+- Confirm that the UP and DOWN controls are active-low with the internal pull-ups
+  enabled, and that their labelled directions match GPIO 6 and GPIO 4.
 - Measure fast and full refresh time.
 - Tune the full-clean interval for ghosting.
 - Check that refreshes do not cause captive-portal request failures.
 - Check sunlight and viewing-distance legibility.
 - Test wrapping limits and unsupported UTF-8 input.
+- Scan the QR on representative Android and iPhone devices and verify the quiet
+  zone, joining the open AP, captive redirect and printed fallback instructions.
 
 Official reference:
 [Elecrow CrowPanel 5.79-inch repository](https://github.com/Elecrow-RD/CrowPanel-ESP32-5.79-E-paper-HMI-Display-with-272-792).

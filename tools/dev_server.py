@@ -24,7 +24,6 @@ ADMIN_AUTHORIZATION = "Basic " + base64.b64encode(
 
 MAX_FORM_BYTES = 4096
 MAX_FORM_FIELDS = 8
-MAX_RECORDS = 32
 LIMITS = {
     "notice_category": 32,
     "notice_message": 512,
@@ -94,6 +93,14 @@ class MockState:
         self.next_tracking_number = 430
         self.total_notices_submitted = 2
         self.total_letters_submitted = 3
+        self.device_time_set = False
+        self.notice_storage_backend = "sd"
+        self.letter_storage_backend = "sd"
+        self.notice_storage_readable = True
+        self.letter_storage_readable = True
+        self.notice_storage_writable = True
+        self.letter_storage_writable = True
+        self.storage_issue = "none"
         self.notices: list[dict[str, Any]] = [
             {
                 "id": 1,
@@ -143,7 +150,7 @@ class MockState:
             self.request_count += 1
             self.last_uri = uri
 
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> dict[str, Any]:
         with self.lock:
             status_count = lambda status: sum(
                 1 for letter in self.letters if letter["status"] == status
@@ -155,27 +162,36 @@ class MockState:
                 "lettersDelivered": status_count("Delivered"),
                 "noticesActive": sum(1 for item in self.notices if not item["hidden"]),
                 "noticesSubmitted": self.total_notices_submitted,
+                "noticePostingAvailable": self.notice_storage_writable,
+                "letterPostingAvailable": self.letter_storage_writable,
+                "noticeHistoryComplete": self.notice_storage_readable,
+                "letterHistoryComplete": self.letter_storage_readable,
+                "letterLookupAvailable": self.letter_storage_readable or bool(self.letters),
+                "storageInterrupted": self.storage_issue != "none",
             }
 
-    def public_notices(self) -> dict[str, Any]:
+    def public_notices(self, before_id: int = 0) -> dict[str, Any]:
         with self.lock:
             visible = [
                 {
                     "id": item["id"],
                     "category": item["category"],
                     "message": item["message"],
-                    "createdUptimeSeconds": 0,
-                    "expiresInSeconds": 48 * 60 * 60,
+                    "createdAtEpochSeconds": item.get("createdAtEpochSeconds", 0),
                 }
                 for item in self.notices
-                if not item["hidden"]
+                if not item["hidden"] and (not before_id or item["id"] < before_id)
             ]
-            return {"notices": visible, "totalSubmitted": self.total_notices_submitted}
+            visible.sort(key=lambda item: item["id"], reverse=True)
+            page = visible[:8]
+            return {
+                "notices": page,
+                "totalSubmitted": self.total_notices_submitted,
+                "nextBeforeId": page[-1]["id"] if len(visible) > len(page) else 0,
+            }
 
     def create_notice(self, category: str, message: str) -> int:
         with self.lock:
-            if len(self.notices) >= MAX_RECORDS:
-                self.notices.pop(0)
             record_id = self.next_notice_id
             self.next_notice_id += 1
             self.total_notices_submitted += 1
@@ -188,19 +204,6 @@ class MockState:
         self, recipient: str, location: str, message: str, sender: str
     ) -> str | None:
         with self.lock:
-            if len(self.letters) >= MAX_RECORDS:
-                removable = next(
-                    (
-                        index
-                        for index, letter in enumerate(self.letters)
-                        if letter["status"] in {"Delivered", "CouldNotFind"}
-                    ),
-                    None,
-                )
-                if removable is None:
-                    return None
-                self.letters.pop(removable)
-
             used = {letter["tracking"] for letter in self.letters}
             for _ in range(10_000):
                 tracking = f"STRAW-{self.next_tracking_number:04d}"
@@ -233,11 +236,34 @@ class MockState:
                     return {"tracking": tracking, "status": str(letter["status"])}
         return None
 
-    def overview(self) -> dict[str, Any]:
+    def overview(self, letter_before: int = 0, notice_before: int = 0) -> dict[str, Any]:
         with self.lock:
+            letters = sorted(
+                (dict(item) for item in self.letters if not letter_before or item["id"] < letter_before),
+                key=lambda item: item["id"],
+                reverse=True,
+            )
+            notices = sorted(
+                (dict(item) for item in self.notices if not notice_before or item["id"] < notice_before),
+                key=lambda item: item["id"],
+                reverse=True,
+            )
+            letter_page = letters[:6]
+            notice_page = notices[:8]
             return {
-                "letters": [dict(letter) for letter in self.letters],
-                "notices": [dict(item) for item in self.notices],
+                "letters": letter_page,
+                "notices": notice_page,
+                "nextLetterBeforeId": letter_page[-1]["id"] if len(letters) > len(letter_page) else 0,
+                "nextNoticeBeforeId": notice_page[-1]["id"] if len(notices) > len(notice_page) else 0,
+                "deviceTimeSet": self.device_time_set,
+                "deviceEpochSeconds": int(time.time()) if self.device_time_set else 0,
+                "noticeStorageBackend": self.notice_storage_backend,
+                "noticeStorageReadable": self.notice_storage_readable,
+                "noticeStorageWritable": self.notice_storage_writable,
+                "letterStorageBackend": self.letter_storage_backend,
+                "letterStorageReadable": self.letter_storage_readable,
+                "letterStorageWritable": self.letter_storage_writable,
+                "storageIssue": self.storage_issue,
             }
 
     def update_letter(self, record_id: int, status: str) -> bool:
@@ -282,6 +308,15 @@ class MockState:
                 "maxStations": 8,
                 "freeHeap": "not available on desktop",
                 "storage": "in-memory; resets when server stops",
+                "deviceTimeSet": self.device_time_set,
+                "deviceEpochSeconds": int(time.time()) if self.device_time_set else 0,
+                "noticeStorageBackend": self.notice_storage_backend,
+                "noticeStorageReadable": self.notice_storage_readable,
+                "noticeStorageWritable": self.notice_storage_writable,
+                "letterStorageBackend": self.letter_storage_backend,
+                "letterStorageReadable": self.letter_storage_readable,
+                "letterStorageWritable": self.letter_storage_writable,
+                "storageIssue": self.storage_issue,
                 "lettersStored": len(self.letters),
                 "noticesStored": len(self.notices),
             }
@@ -396,7 +431,11 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, self.server.state.stats())
             return
         if path == "/api/notices":
-            self.send_json(HTTPStatus.OK, self.server.state.public_notices())
+            try:
+                before_id = int(parse_qs(parsed.query).get("before", ["0"])[0])
+            except ValueError:
+                before_id = 0
+            self.send_json(HTTPStatus.OK, self.server.state.public_notices(before_id))
             return
         if path == "/api/letters/status":
             tracking = parse_qs(parsed.query).get("tracking", [""])[0].strip().upper()
@@ -413,7 +452,16 @@ class PreviewHandler(BaseHTTPRequestHandler):
             if not self.authenticated():
                 return
             if path == "/api/admin/overview":
-                self.send_json(HTTPStatus.OK, self.server.state.overview())
+                query = parse_qs(parsed.query)
+                try:
+                    letter_before = int(query.get("letterBefore", ["0"])[0])
+                    notice_before = int(query.get("noticeBefore", ["0"])[0])
+                except ValueError:
+                    letter_before = notice_before = 0
+                self.send_json(
+                    HTTPStatus.OK,
+                    self.server.state.overview(letter_before, notice_before),
+                )
                 return
             if path == "/api/admin/diagnostics":
                 self.send_json(HTTPStatus.OK, self.server.state.diagnostics())
@@ -434,6 +482,11 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/notices":
+            if not self.server.state.notice_storage_writable:
+                self.send_error_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE, "Persistent storage is unavailable"
+                )
+                return
             category = form.get("category", "").strip()
             message = form.get("message", "").strip()
             if not category or not message:
@@ -449,6 +502,11 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/letters":
+            if not self.server.state.letter_storage_writable:
+                self.send_error_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE, "Persistent storage is unavailable"
+                )
+                return
             recipient = form.get("recipient", "").strip()
             location = form.get("location", "").strip()
             message = form.get("message", "").strip()
@@ -486,6 +544,11 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/letters/status":
+            if not self.server.state.letter_storage_writable:
+                self.send_error_json(
+                    HTTPStatus.INSUFFICIENT_STORAGE, "Could not save letter status"
+                )
+                return
             try:
                 record_id = int(form.get("id", "0"))
             except ValueError:
@@ -501,7 +564,26 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.OK, {"ok": True})
             return
 
+        if path == "/api/admin/time":
+            try:
+                epoch_seconds = int(form.get("epochSeconds", "0"))
+            except ValueError:
+                epoch_seconds = 0
+            if not 1_577_836_800 <= epoch_seconds < 4_102_444_800:
+                self.send_error_json(
+                    HTTPStatus.BAD_REQUEST, "A valid browser UTC time is required"
+                )
+            else:
+                self.server.state.device_time_set = True
+                self.send_json(HTTPStatus.OK, {"ok": True})
+            return
+
         if path == "/api/admin/letters/delete":
+            if not self.server.state.letter_storage_writable:
+                self.send_error_json(
+                    HTTPStatus.INSUFFICIENT_STORAGE, "Could not delete letter"
+                )
+                return
             try:
                 record_id = int(form.get("id", "0"))
             except ValueError:
@@ -518,6 +600,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
             "/api/admin/notices/moderate": ("notices", "Notice"),
         }
         if path in moderation:
+            if not self.server.state.notice_storage_writable:
+                self.send_error_json(
+                    HTTPStatus.INSUFFICIENT_STORAGE,
+                    "Notice not found or could not be saved",
+                )
+                return
             try:
                 record_id = int(form.get("id", "0"))
             except ValueError:

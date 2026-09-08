@@ -106,9 +106,13 @@ CrowPanel 5.79-inch E-Paper (272 × 792)
 
 The PlatformIO target now matches the installed ESP32-S3 module and memory.
 The e-paper driver is implemented from Elecrow's matching dual-SSD1683 example,
-including its software SPI pins and GPIO 7 power enable. Its orientation,
-refresh timing, ghosting, and shutdown sequencing still require verification on
-the physical panel. Input and TF-card drivers are not yet implemented.
+including its software SPI pins and GPIO 7 power enable. UP/DOWN navigation and
+the TF-card SPI backend are implemented with the pin and power assignments above.
+Button polarity/direction, SD-card compatibility, live-removal failure handling,
+FAT power-loss recovery, display orientation, refresh timing, ghosting, and
+shutdown sequencing still require verification on physical hardware.
+A 64 GB card should be formatted as FAT32 for initial testing; verify the exact
+card and format on the board before relying on it for festival data.
 
 ## Hardware references
 

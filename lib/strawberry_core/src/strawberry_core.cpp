@@ -111,6 +111,25 @@ bool recentlySubmitted(uint32_t hash, uint32_t previousHash, uint32_t nowMs,
          static_cast<uint32_t>(nowMs - previousTimeMs) < windowMs;
 }
 
+uint64_t backfillCreationEpochSeconds(uint64_t currentEpochSeconds,
+                                      uint32_t currentUptimeMs,
+                                      uint32_t creationUptimeMs,
+                                      bool createdThisBoot) {
+  if (!createdThisBoot) return currentEpochSeconds;
+  const uint64_t ageSeconds =
+      static_cast<uint32_t>(currentUptimeMs - creationUptimeMs) / 1000U;
+  return ageSeconds > currentEpochSeconds ? 0
+                                          : currentEpochSeconds - ageSeconds;
+}
+
+bool recordAgeReached(uint64_t currentEpochSeconds,
+                      uint64_t creationEpochSeconds,
+                      uint64_t lifetimeSeconds) {
+  return creationEpochSeconds != 0 &&
+         currentEpochSeconds >= creationEpochSeconds &&
+         currentEpochSeconds - creationEpochSeconds >= lifetimeSeconds;
+}
+
 bool formatTrackingCode(uint16_t number, char* destination,
                         size_t destinationSize) {
   if (destination == nullptr || destinationSize < kTrackingCodeBytes + 1 ||

@@ -123,6 +123,34 @@ button:active {
   box-shadow: 1px 1px 0 var(--red-dark);
 }
 
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+button:disabled:active {
+  transform: none;
+  box-shadow: 4px 4px 0 var(--red-dark);
+}
+
+.service-warning, .system-status {
+  margin: 1rem 0;
+  padding: .85rem 1rem;
+  border: 2px solid var(--red-dark);
+  border-radius: .25rem;
+  background: #fff1cf;
+  color: var(--red-dark);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.system-status {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: .92rem;
+}
+
+.service-warning[hidden] { display: none; }
+
 .status, .ticket {
   padding: 1rem;
   border: 2px dashed var(--red);

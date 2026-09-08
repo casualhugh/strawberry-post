@@ -68,6 +68,7 @@ size_t wrapLine(const char* input, size_t start, size_t columns,
 
 uint32_t snapshotHash(const Snapshot& snapshot) {
   uint32_t hash = UINT32_C(2166136261);
+  hash = appendHash(hash, &snapshot.wifiQr, sizeof(snapshot.wifiQr));
   hash = appendHash(hash, &snapshot.noticeId, sizeof(snapshot.noticeId));
   hash = appendHash(hash, &snapshot.noticePosition, sizeof(snapshot.noticePosition));
   hash = appendHash(hash, &snapshot.noticeCount, sizeof(snapshot.noticeCount));
@@ -90,8 +91,53 @@ RefreshKind chooseRefresh(bool initialized, uint32_t previousHash,
   return RefreshKind::Fast;
 }
 
+size_t previousNoticeIndex(size_t current, size_t count) {
+  if (count == 0) return 0;
+  current %= count;
+  return current == 0 ? count - 1 : current - 1;
+}
+
 size_t nextNoticeIndex(size_t current, size_t count) {
   return count == 0 ? 0 : (current + 1) % count;
+}
+
+RotationState nextAutomaticFrame(const RotationState& current,
+                                 size_t noticeCount,
+                                 uint8_t noticeSlotsPerWifiQr) {
+  if (noticeCount == 0) return RotationState{0, 0, true};
+  if (current.wifiQr) {
+    return RotationState{nextNoticeIndex(current.noticeIndex, noticeCount), 1,
+                         false};
+  }
+  if (noticeSlotsPerWifiQr != 0 &&
+      current.noticeSlotsShown >= noticeSlotsPerWifiQr) {
+    return RotationState{current.noticeIndex % noticeCount, 0, true};
+  }
+  const uint16_t slots = current.noticeSlotsShown == UINT16_MAX
+                             ? UINT16_MAX
+                             : current.noticeSlotsShown + 1;
+  return RotationState{nextNoticeIndex(current.noticeIndex, noticeCount), slots,
+                       false};
+}
+
+void initializeButton(DebouncedButton& button, bool pressed, uint32_t nowMs) {
+  button.rawPressed = pressed;
+  button.stablePressed = pressed;
+  button.rawChangedAtMs = nowMs;
+}
+
+bool buttonPressed(DebouncedButton& button, bool pressed, uint32_t nowMs,
+                   uint32_t debounceMs) {
+  if (pressed != button.rawPressed) {
+    button.rawPressed = pressed;
+    button.rawChangedAtMs = nowMs;
+  }
+  if (button.rawPressed == button.stablePressed ||
+      nowMs - button.rawChangedAtMs < debounceMs) {
+    return false;
+  }
+  button.stablePressed = button.rawPressed;
+  return button.stablePressed;
 }
 
 }  // namespace EpaperCore

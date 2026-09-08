@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Track a Letter | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="public-page letters-page">
   <main>
@@ -28,6 +28,7 @@
       <p class="section-kicker">Tracking number</p>
       <h2 id="track-heading">Check with the sorting room</h2>
       <p class="hint">Enter the tracking number you received after sending your letter.</p>
+      <p id="tracking-service-warning" class="service-warning" role="status" hidden></p>
       <form id="track">
         <label>Tracking number
           <span class="tracking-number-input">
@@ -45,8 +46,23 @@
   <script>
     const track = document.querySelector('#track');
     const status = document.querySelector('#status');
+    const serviceWarning = document.querySelector('#tracking-service-warning');
+    let historyComplete = true;
     const requested = new URLSearchParams(location.search).get('tracking');
     if (requested) track.elements.trackingDigits.value = requested.replace(/^STRAW-/i, '').replace(/[^0-9]/g, '').slice(0, 4);
+
+    async function loadAvailability() {
+      const response = await fetch('/api/stats');
+      const stats = await response.json();
+      historyComplete = stats.letterHistoryComplete;
+      serviceWarning.hidden = historyComplete;
+      if (!historyComplete) {
+        serviceWarning.textContent = 'The filing cabinet is having a moment. We can only check the letters already on the desk. Ask the Postie if yours has gone bush.';
+      }
+      if (!stats.letterLookupAvailable) {
+        for (const control of track.elements) control.disabled = true;
+      }
+    }
 
     track.addEventListener('submit', async event => {
       event.preventDefault();
@@ -55,10 +71,13 @@
       const response = await fetch(`/api/letters/status?tracking=${encodeURIComponent(number)}`);
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 404) await loadAvailability().catch(() => {});
         if (response.status === 400) {
           status.textContent = 'That number has gone walkabout. Check the digits and try again.';
-        } else if (response.status === 404) {
+        } else if (response.status === 404 && historyComplete) {
           status.textContent = 'We could not find that letter. It may be hiding near the lost thongs.';
+        } else if (response.status === 404) {
+          status.textContent = 'The filing cabinet is having a moment. We can only check the letters already on the desk. Ask the Postie if yours has gone bush.';
         } else {
           status.textContent = data.error || 'The sorting room is having a little lie-down. Try again shortly.';
         }
@@ -73,6 +92,8 @@
       };
       status.textContent = data.error || `${data.tracking}: ${labels[data.status] || data.status}`;
     });
+
+    loadAvailability().catch(() => {});
   </script>
 </body>
 </html>

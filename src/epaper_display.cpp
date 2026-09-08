@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <EPD.h>
 #include <EPD_Init.h>
+#include <qrcode.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,19 +16,32 @@
 namespace {
 
 constexpr uint8_t kDisplayPowerPin = 7;
+constexpr uint8_t kUpButtonPin = 6;
+constexpr uint8_t kDownButtonPin = 4;
 constexpr uint16_t kVisibleWidth = 792;
 constexpr uint16_t kVisibleHeight = 272;
 constexpr size_t kFramebufferBytes = (EPD_W / 8U) * EPD_H;
 constexpr size_t kMessageColumns = 61;
 constexpr size_t kMessageLines = 4;
+constexpr uint8_t kQrVersion = 4;
+constexpr uint8_t kQrScale = 6;
+constexpr uint8_t kQrQuietZone = 4;
+constexpr uint8_t kQrModuleCount = 4 * kQrVersion + 17;
+constexpr size_t kQrBufferBytes =
+    (static_cast<size_t>(kQrModuleCount) * kQrModuleCount + 7) / 8;
 
 uint8_t framebuffer[kFramebufferBytes];
 bool available = false;
 bool initialized = false;
 uint8_t fastRefreshes = 0;
 size_t noticeIndex = 0;
+bool showingWifiQr = false;
+bool wifiQrForEmptyBoard = false;
+uint16_t noticeSlotsShown = 0;
 uint32_t lastRefreshAtMs = 0;
 uint32_t displayedHash = 0;
+EpaperCore::DebouncedButton upButton{};
+EpaperCore::DebouncedButton downButton{};
 
 uint16_t boundedCount(size_t count) {
   return count > UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(count);
@@ -52,16 +66,72 @@ void drawText(uint16_t x, uint16_t y, const char* text, uint16_t size,
   EPD_ShowString(x, y, text, size, colour);
 }
 
+bool buildWifiPayload(char* output, size_t outputSize) {
+  if (!output || outputSize == 0) return false;
+  size_t written = 0;
+  const char prefix[] = "WIFI:T:nopass;S:";
+  const char suffix[] = ";;";
+  for (const char value : prefix) {
+    if (!value) break;
+    if (written + 1 >= outputSize) return false;
+    output[written++] = value;
+  }
+  for (size_t index = 0; AppConfig::kApSsid[index]; ++index) {
+    const char value = AppConfig::kApSsid[index];
+    if (value == '\\' || value == ';' || value == ',' || value == ':' ||
+        value == '"') {
+      if (written + 1 >= outputSize) return false;
+      output[written++] = '\\';
+    }
+    if (written + 1 >= outputSize) return false;
+    output[written++] = value;
+  }
+  for (const char value : suffix) {
+    if (!value) break;
+    if (written + 1 >= outputSize) return false;
+    output[written++] = value;
+  }
+  output[written] = '\0';
+  return true;
+}
+
+void drawWifiQr() {
+  char payload[128] = {};
+  QRCode qr{};
+  uint8_t qrData[kQrBufferBytes] = {};
+  if (qrcode_getBufferSize(kQrVersion) > sizeof(qrData) ||
+      !buildWifiPayload(payload, sizeof(payload)) ||
+      qrcode_initText(&qr, qrData, kQrVersion, ECC_LOW, payload) != 0) {
+    drawText(28, 110, "WI-FI QR UNAVAILABLE", 24);
+    return;
+  }
+
+  const uint16_t qrOriginX = 13 + kQrQuietZone * kQrScale;
+  const uint16_t qrOriginY = 13 + kQrQuietZone * kQrScale;
+  for (uint8_t y = 0; y < qr.size; ++y) {
+    for (uint8_t x = 0; x < qr.size; ++x) {
+      if (!qrcode_getModule(&qr, x, y)) continue;
+      const uint16_t left = qrOriginX + x * kQrScale;
+      const uint16_t top = qrOriginY + y * kQrScale;
+      EPD_DrawRectangle(left, top, left + kQrScale - 1,
+                        top + kQrScale - 1, BLACK, 1);
+    }
+  }
+
+  drawLogo(300, 30);
+  drawText(350, 39, "STRAWBERRY POST", 24);
+  drawText(300, 100, "JOIN THE WI-FI", 32);
+  drawText(300, 148, "STRAWBERRY POST", 24);
+  drawText(300, 180, "no internet", 24);
+  drawText(300, 226, "THEN OPEN  post.local", 24);
+}
+
 void makeSnapshot(EpaperCore::Snapshot& snapshot) {
   snapshot = {};
   const size_t count = activeNoticeCount();
-  if (count == 0) {
-    noticeIndex = 0;
-    strlcpy(snapshot.category, "NOTICE BOARD", sizeof(snapshot.category));
-    strlcpy(snapshot.message,
-            "Nothing pinned yet. Either everyone's behaving or nobody's "
-            "awake.",
-            sizeof(snapshot.message));
+  if (showingWifiQr || count == 0) {
+    snapshot.wifiQr = 1;
+    return;
   } else {
     if (noticeIndex >= count) noticeIndex = 0;
     const NoticeRecord* notice = activeNoticeAt(noticeIndex);
@@ -69,7 +139,8 @@ void makeSnapshot(EpaperCore::Snapshot& snapshot) {
       snapshot.noticeId = notice->id;
       snapshot.noticePosition = boundedCount(noticeIndex + 1);
       snapshot.noticeCount = boundedCount(count);
-      EpaperCore::sanitizeAscii(notice->category, snapshot.category,
+      EpaperCore::sanitizeAscii(noticeCategoryName(notice->category),
+                               snapshot.category,
                                sizeof(snapshot.category));
       EpaperCore::sanitizeAscii(notice->message, snapshot.message,
                                sizeof(snapshot.message));
@@ -84,6 +155,10 @@ void makeSnapshot(EpaperCore::Snapshot& snapshot) {
 
 void drawSnapshot(const EpaperCore::Snapshot& snapshot) {
   Paint_Clear(WHITE);
+  if (snapshot.wifiQr) {
+    drawWifiQr();
+    return;
+  }
   EPD_DrawRectangle(0, 0, kVisibleWidth - 1, kVisibleHeight - 1, BLACK, 0);
   EPD_DrawLine(0, 50, kVisibleWidth - 1, 50, BLACK);
   EPD_DrawLine(0, 219, kVisibleWidth - 1, 219, BLACK);
@@ -171,12 +246,35 @@ bool refreshNow() {
   return true;
 }
 
+bool isButtonPressed(uint8_t pin) { return digitalRead(pin) == LOW; }
+
+bool showFrame(size_t nextIndex, uint32_t nowMs) {
+  noticeIndex = nextIndex;
+  // Manual navigation starts a fresh automatic-rotation interval, including
+  // when there is only one notice and no framebuffer update is needed.
+  lastRefreshAtMs = nowMs;
+  if (refreshNow()) return true;
+  available = false;
+  Serial.println("E-paper refresh failed; display updates disabled.");
+  return false;
+}
+
 }  // namespace
 
 bool startEpaperDisplay() {
+  pinMode(kUpButtonPin, INPUT_PULLUP);
+  pinMode(kDownButtonPin, INPUT_PULLUP);
+  const uint32_t startedAtMs = millis();
+  EpaperCore::initializeButton(upButton, isButtonPressed(kUpButtonPin),
+                              startedAtMs);
+  EpaperCore::initializeButton(downButton, isButtonPressed(kDownButtonPin),
+                              startedAtMs);
   pinMode(kDisplayPowerPin, OUTPUT);
   digitalWrite(kDisplayPowerPin, HIGH);
   Paint_NewImage(framebuffer, EPD_W, EPD_H, Rotation, WHITE);
+  showingWifiQr = activeNoticeCount() == 0;
+  wifiQrForEmptyBoard = showingWifiQr;
+  noticeSlotsShown = showingWifiQr ? 0 : 1;
   available = refreshNow();
   lastRefreshAtMs = millis();
   if (!available) {
@@ -188,16 +286,42 @@ bool startEpaperDisplay() {
 }
 
 void handleEpaperDisplay() {
-  if (!available ||
-      millis() - lastRefreshAtMs < AppConfig::kEpaperRotationIntervalMs) {
+  if (!available) return;
+
+  const uint32_t nowMs = millis();
+  const bool upPressed = EpaperCore::buttonPressed(
+      upButton, isButtonPressed(kUpButtonPin), nowMs,
+      AppConfig::kButtonDebounceMs);
+  const bool downPressed = EpaperCore::buttonPressed(
+      downButton, isButtonPressed(kDownButtonPin), nowMs,
+      AppConfig::kButtonDebounceMs);
+  const size_t count = activeNoticeCount();
+
+  if (count && upPressed) {
+    showingWifiQr = false;
+    wifiQrForEmptyBoard = false;
+    noticeSlotsShown = 1;
+    showFrame(EpaperCore::previousNoticeIndex(noticeIndex, count), nowMs);
     return;
   }
-  lastRefreshAtMs = millis();
-  noticeIndex = EpaperCore::nextNoticeIndex(noticeIndex, activeNoticeCount());
-  if (!refreshNow()) {
-    available = false;
-    Serial.println("E-paper refresh failed; display updates disabled.");
+  if (count && downPressed) {
+    showingWifiQr = false;
+    wifiQrForEmptyBoard = false;
+    noticeSlotsShown = 1;
+    showFrame(EpaperCore::nextNoticeIndex(noticeIndex, count), nowMs);
+    return;
   }
+  if (nowMs - lastRefreshAtMs < AppConfig::kEpaperRotationIntervalMs) return;
+  const EpaperCore::RotationState next =
+      count != 0 && showingWifiQr && wifiQrForEmptyBoard
+          ? EpaperCore::RotationState{0, 1, false}
+          : EpaperCore::nextAutomaticFrame(
+                {noticeIndex, noticeSlotsShown, showingWifiQr}, count,
+                AppConfig::kEpaperNoticeSlotsPerWifiQr);
+  showingWifiQr = next.wifiQr;
+  wifiQrForEmptyBoard = showingWifiQr && count == 0;
+  noticeSlotsShown = next.noticeSlotsShown;
+  showFrame(next.noticeIndex, nowMs);
 }
 
 bool epaperDisplayAvailable() { return available; }

@@ -83,6 +83,19 @@ class WebPreviewTests(unittest.TestCase):
         for category in dev_server.NOTICE_CATEGORIES:
             self.assertIn(f"<option>{html.escape(category)}</option>", index)
 
+        for filename in ("index.html", "letters.html", "track.html"):
+            public_source = (PROJECT_ROOT / "web" / filename).read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn("SD card", public_source)
+            self.assertNotIn("LittleFS", public_source)
+            self.assertNotIn("internal flash", public_source)
+
+        postie = (PROJECT_ROOT / "web" / "postie.html").read_text(encoding="utf-8")
+        self.assertIn("SD card failed after startup", postie)
+        self.assertIn("button.disabled = !letterActionsAvailable", postie)
+        self.assertIn("button.disabled = !noticeActionsAvailable", postie)
+
     def test_pages_styles_and_postie_authentication_are_served(self) -> None:
         for path in ("/", "/letters", "/track", "/style.css", "/logo.svg"):
             status, body, headers = self.request(path)
@@ -217,6 +230,131 @@ class WebPreviewTests(unittest.TestCase):
         )
         self.assertEqual(404, status)
         self.assertIn("error", error)
+
+    def test_notice_and_postie_history_are_paged(self) -> None:
+        for index in range(10):
+            status, _ = self.request_json(
+                "/api/notices",
+                method="POST",
+                form={"category": "General", "message": f"Paged notice {index}"},
+            )
+            self.assertEqual(201, status)
+
+        status, first = self.request_json("/api/notices")
+        self.assertEqual(200, status)
+        self.assertEqual(8, len(first["notices"]))
+        self.assertGreater(first["nextBeforeId"], 0)
+        status, second = self.request_json(
+            f"/api/notices?before={first['nextBeforeId']}"
+        )
+        self.assertEqual(200, status)
+        self.assertEqual(4, len(second["notices"]))
+        self.assertEqual(0, second["nextBeforeId"])
+
+        for index in range(5):
+            status, _ = self.request_json(
+                "/api/letters",
+                method="POST",
+                form={"recipient": f"Person {index}", "message": "Paged letter"},
+            )
+            self.assertEqual(201, status)
+        status, first_admin = self.request_json(
+            "/api/admin/overview", headers=self.admin_headers
+        )
+        self.assertEqual(6, len(first_admin["letters"]))
+        self.assertGreater(first_admin["nextLetterBeforeId"], 0)
+        status, second_admin = self.request_json(
+            "/api/admin/overview?letterBefore="
+            f"{first_admin['nextLetterBeforeId']}",
+            headers=self.admin_headers,
+        )
+        self.assertEqual(200, status)
+        self.assertEqual(2, len(second_admin["letters"]))
+
+    def test_postie_sets_browser_utc_time(self) -> None:
+        status, _, _ = self.request(
+            "/api/admin/time",
+            method="POST",
+            form={"epochSeconds": 1_800_000_000},
+        )
+        self.assertEqual(401, status)
+        status, error = self.request_json(
+            "/api/admin/time",
+            method="POST",
+            form={"epochSeconds": "yesterday"},
+            headers=self.admin_headers,
+        )
+        self.assertEqual(400, status)
+        self.assertIn("error", error)
+        status, result = self.request_json(
+            "/api/admin/time",
+            method="POST",
+            form={"epochSeconds": 1_800_000_000},
+            headers=self.admin_headers,
+        )
+        self.assertEqual(200, status)
+        self.assertEqual({"ok": True}, result)
+        _, overview = self.request_json(
+            "/api/admin/overview", headers=self.admin_headers
+        )
+        self.assertTrue(overview["deviceTimeSet"])
+        self.assertGreater(overview["deviceEpochSeconds"], 0)
+
+    def test_storage_state_drives_public_and_postie_availability(self) -> None:
+        state = self.server.state
+        state.notice_storage_backend = "none"
+        state.notice_storage_readable = False
+        state.notice_storage_writable = False
+        state.letter_storage_backend = "littlefs"
+
+        status, stats = self.request_json("/api/stats")
+        self.assertEqual(200, status)
+        self.assertFalse(stats["noticePostingAvailable"])
+        self.assertTrue(stats["letterPostingAvailable"])
+        self.assertFalse(stats["storageInterrupted"])
+
+        status, _ = self.request_json(
+            "/api/notices",
+            method="POST",
+            form={"category": "General", "message": "Should not save"},
+        )
+        self.assertEqual(503, status)
+        status, _ = self.request_json(
+            "/api/letters",
+            method="POST",
+            form={"recipient": "Someone", "message": "Flash fallback works"},
+        )
+        self.assertEqual(201, status)
+
+        status, overview = self.request_json(
+            "/api/admin/overview", headers=self.admin_headers
+        )
+        self.assertEqual(200, status)
+        self.assertEqual("none", overview["noticeStorageBackend"])
+        self.assertEqual("littlefs", overview["letterStorageBackend"])
+        self.assertFalse(overview["noticeStorageWritable"])
+        self.assertTrue(overview["letterStorageWritable"])
+
+        state.notice_storage_backend = "sd"
+        state.letter_storage_backend = "sd"
+        state.notice_storage_readable = False
+        state.letter_storage_readable = False
+        state.notice_storage_writable = False
+        state.letter_storage_writable = False
+        state.storage_issue = "sd-failure"
+        _, stats = self.request_json("/api/stats")
+        self.assertTrue(stats["storageInterrupted"])
+        self.assertFalse(stats["noticeHistoryComplete"])
+        self.assertFalse(stats["letterHistoryComplete"])
+        self.assertTrue(stats["letterLookupAvailable"])
+
+        status, _ = self.request_json(
+            "/api/admin/letters/status",
+            method="POST",
+            form={"id": 1, "status": "Delivered"},
+            headers=self.admin_headers,
+        )
+        self.assertEqual(507, status)
 
     def test_malformed_form_encoding_and_negative_length_are_rejected(self) -> None:
         for body in (b"", b"category=General&message=%FF"):

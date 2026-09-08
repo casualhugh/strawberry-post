@@ -4,18 +4,20 @@ Strawberry Post tests
 `native/test_domain` covers the allocation-free domain algorithms shared with
 the firmware. `native/test_storage` uses an in-memory file backend to exercise
 storage recovery and atomic replacement. `native/test_epaper` covers display
-text sanitising, line wrapping, notice rotation, hashing, and refresh policy.
+text sanitising, line wrapping, notice rotation, button debounce, QR/notice
+snapshot hashing, and refresh policy.
 
 Run only the desktop environment:
 
     pio test --environment native
 
 PlatformIO supplies Unity but not a host compiler. GCC/G++ must be available on
-PATH. Hardware network, captive-portal, LittleFS power-cut, and load behavior
-remain outside these suites.
+PATH. Hardware network, captive-portal, SD/LittleFS power-cut, live card-removal,
+and load behavior remain outside these suites.
 
 `tools/test_web_preview.py` starts the desktop mock server on an ephemeral port
-and checks the generated web bundle plus public and authenticated HTTP flows.
+and checks the generated web bundle plus public and authenticated HTTP flows,
+including paged history and degraded-storage UI state.
 Run it with:
 
     python -m unittest discover -s test\tools -v

@@ -4,21 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Postie | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="admin">
   <main>
     <h1>Postie&rsquo;s Sorting Room</h1>
     <p>This page and its APIs require Postie authentication.</p>
+    <p id="storage-status" class="system-status">Checking storage status...</p>
+    <button id="set-time" type="button">Set device clock from this browser</button>
+    <p id="clock-status">Checking device clock...</p>
     <p><a href="/postie/diagnostics">System diagnostics</a></p>
     <h2>Letters</h2>
     <section id="letters"></section>
+    <button id="older-letters" type="button" hidden>Load older letters</button>
     <h2>Notice moderation</h2>
     <section id="notices"></section>
+    <button id="older-notices" type="button" hidden>Load older notices</button>
     <p id="result" role="status"></p>
   </main>
   <script>
     const result = document.querySelector('#result');
+    const clockStatus = document.querySelector('#clock-status');
+    const storageStatus = document.querySelector('#storage-status');
+    const olderLetters = document.querySelector('#older-letters');
+    const olderNotices = document.querySelector('#older-notices');
+    let nextLetterBeforeId = 0;
+    let nextNoticeBeforeId = 0;
+    let letterActionsAvailable = false;
+    let noticeActionsAvailable = false;
     function element(tag, text, className) {
       const node = document.createElement(tag);
       if (text !== undefined) node.textContent = text;
@@ -34,7 +47,7 @@
       });
       const body = await response.json();
       result.textContent = body.error || 'Saved.';
-      if (response.ok) await load();
+      if (response.ok || [503, 507].includes(response.status)) await load();
     }
 
     function actionButton(label, callback, className) {
@@ -43,48 +56,106 @@
       return button;
     }
 
-    async function load() {
-      const response = await fetch('/api/admin/overview');
+    function storageMessage(data) {
+      if (data.storageIssue === 'sd-failure') {
+        return 'SD card failed after startup. Notice and letter storage are read-only. Only cached records are available. Nothing new can be saved or changed. Power off the device, check the SD card, then restart.';
+      }
+      if (data.noticeStorageBackend === 'none' && data.letterStorageBackend === 'littlefs') {
+        if (!data.letterStorageWritable) {
+          return 'No SD card was detected at startup. Notice storage is unavailable. Internal flash storage has failed and letter storage is read-only. Power off the device and service the storage before restarting.';
+        }
+        return 'No SD card was detected at startup. Notice storage is unavailable. Letters are being saved to internal flash. Power off before installing an SD card, then restart.';
+      }
+      if (data.noticeStorageBackend === 'none' && data.letterStorageBackend === 'none') {
+        return 'No SD card was detected and internal flash storage is unavailable. Notices and letters cannot be saved.';
+      }
+      if (data.storageIssue === 'littlefs-failure') {
+        return 'Internal flash storage failed. Letter storage is read-only until the device is restarted.';
+      }
+      return `Storage active. Notices: ${data.noticeStorageBackend}, ${data.noticeStorageWritable ? 'writable' : 'read-only'}. Letters: ${data.letterStorageBackend}, ${data.letterStorageWritable ? 'writable' : 'read-only'}.`;
+    }
+
+    function letterCard(letter) {
+      const card = element('details', undefined, 'card');
+      if (letter.status === 'Waiting') card.open = true;
+      card.append(element('summary', `${letter.tracking} | ${letter.recipient} | ${letter.status}`));
+      const details = element('dl', undefined, 'private');
+      [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
+        .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
+      card.append(details);
+      ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
+        card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
+      card.append(actionButton('Delete', () => post('/api/admin/letters/delete', {id: letter.id}), 'alt'));
+      card.querySelectorAll('button').forEach(button => { button.disabled = !letterActionsAvailable; });
+      return card;
+    }
+
+    function noticeCard(notice) {
+      const card = element('article', undefined, 'card');
+      card.append(
+        element('strong', notice.category),
+        element('p', notice.message),
+        actionButton(notice.hidden ? 'Unhide' : 'Hide', () => post('/api/admin/notices/moderate', {
+          id: notice.id,
+          action: notice.hidden ? 'unhide' : 'hide'
+        }), 'alt'),
+        actionButton('Delete', () => post('/api/admin/notices/moderate', {id: notice.id, action: 'delete'}))
+      );
+      card.querySelectorAll('button').forEach(button => { button.disabled = !noticeActionsAvailable; });
+      return card;
+    }
+
+    async function fetchOverview(letterBefore = 0, noticeBefore = 0) {
+      const query = new URLSearchParams({letterBefore, noticeBefore});
+      const response = await fetch(`/api/admin/overview?${query}`);
       if (!response.ok) {
         result.textContent = 'Authentication failed.';
-        return;
+        throw new Error('overview failed');
       }
-      const data = await response.json();
+      return response.json();
+    }
+
+    async function load() {
+      const data = await fetchOverview();
+      letterActionsAvailable = data.letterStorageWritable;
+      noticeActionsAvailable = data.noticeStorageWritable;
+      storageStatus.textContent = storageMessage(data);
 
       const letters = document.querySelector('#letters');
       if (!data.letters.length) {
         letters.replaceChildren(element('p', 'No letters waiting. Either everyone is organised, or nobody has found the post office.'));
       } else {
-        letters.replaceChildren(...data.letters.map(letter => {
-        const card = element('details', undefined, 'card');
-        if (letter.status === 'Waiting') card.open = true;
-        card.append(element('summary', `${letter.tracking} | ${letter.recipient} | ${letter.status}`));
-        const details = element('dl', undefined, 'private');
-        [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
-          .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
-        card.append(details);
-        ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
-          card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
-        card.append(actionButton('Delete', () => post('/api/admin/letters/delete', {id: letter.id}), 'alt'));
-        return card;
-        }));
+        letters.replaceChildren(...data.letters.map(letterCard));
       }
 
       const notices = document.querySelector('#notices');
-      notices.replaceChildren(...data.notices.map(notice => {
-        const card = element('article', undefined, 'card');
-        card.append(
-          element('strong', notice.category),
-          element('p', notice.message),
-          actionButton(notice.hidden ? 'Unhide' : 'Hide', () => post('/api/admin/notices/moderate', {
-            id: notice.id,
-            action: notice.hidden ? 'unhide' : 'hide'
-          }), 'alt'),
-          actionButton('Delete', () => post('/api/admin/notices/moderate', {id: notice.id, action: 'delete'}))
-        );
-        return card;
-      }));
+      notices.replaceChildren(...data.notices.map(noticeCard));
+      nextLetterBeforeId = data.nextLetterBeforeId;
+      nextNoticeBeforeId = data.nextNoticeBeforeId;
+      olderLetters.hidden = !nextLetterBeforeId;
+      olderNotices.hidden = !nextNoticeBeforeId;
+      clockStatus.textContent = data.deviceTimeSet
+        ? `Device clock set: ${new Date(data.deviceEpochSeconds * 1000).toLocaleString()}`
+        : 'Device clock is not set. Pending records currently use boot-relative time.';
     }
+
+    olderLetters.onclick = async () => {
+      const data = await fetchOverview(nextLetterBeforeId, 1);
+      document.querySelector('#letters').append(...data.letters.map(letterCard));
+      nextLetterBeforeId = data.nextLetterBeforeId;
+      olderLetters.hidden = !nextLetterBeforeId;
+    };
+
+    olderNotices.onclick = async () => {
+      const data = await fetchOverview(1, nextNoticeBeforeId);
+      document.querySelector('#notices').append(...data.notices.map(noticeCard));
+      nextNoticeBeforeId = data.nextNoticeBeforeId;
+      olderNotices.hidden = !nextNoticeBeforeId;
+    };
+
+    document.querySelector('#set-time').onclick = () => post('/api/admin/time', {
+      epochSeconds: Math.floor(Date.now() / 1000)
+    });
 
     load().catch(() => { result.textContent = 'Could not load the sorting room.'; });
   </script>

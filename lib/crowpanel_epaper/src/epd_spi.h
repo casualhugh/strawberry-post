@@ -1,22 +1,14 @@
-#ifndef _SPI_H_
-#define _SPI_H_
+#pragma once
 
 #include <Arduino.h>
 
-//项目板子
+// CrowPanel e-paper software SPI pins.
 #define SCK 12
 #define MOSI 11
 #define RES 47
 #define DC 46
 #define CS 45
 #define BUSY 48
-
-//#define SCK 12
-//#define MOSI 11
-//#define RES 21
-//#define DC 9
-//#define CS 10
-//#define BUSY 48
 
 #define EPD_SCK_Clr() digitalWrite(SCK, LOW)
 #define EPD_SCK_Set() digitalWrite(SCK, HIGH)
@@ -39,5 +31,3 @@ void EPD_GPIOInit(void);
 void EPD_WR_Bus(uint8_t dat);
 void EPD_WR_REG(uint8_t reg);
 void EPD_WR_DATA8(uint8_t dat);
-
-#endif

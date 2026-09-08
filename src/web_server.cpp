@@ -14,15 +14,31 @@ namespace {
 
 WebServer server(AppConfig::kHttpPort);
 
+bool canonicalOrFallbackHost() {
+  String host = server.hostHeader();
+  host.toLowerCase();
+  return host == "post.local" || host == "post.local:80" ||
+         host == "192.168.4.1" || host == "192.168.4.1:80";
+}
+
+void redirectToHome() {
+  recordHttpRequest(server);
+  server.sendHeader("Location", AppConfig::kLocalUrl, true);
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(302, "text/plain; charset=utf-8",
+              "Strawberry Post is at http://post.local/\n");
+}
+
 void handleHome() {
+  if (!canonicalOrFallbackHost()) {
+    redirectToHome();
+    return;
+  }
   sendPublicHome(server);
 }
 
 void handleNotFound() {
-  recordHttpRequest(server);
-  server.sendHeader("Location", AppConfig::kLocalUrl, true);
-  server.send(302, "text/plain; charset=utf-8",
-              "Strawberry Post is at http://post.local/\n");
+  redirectToHome();
 }
 
 }  // namespace
@@ -36,9 +52,9 @@ void startWebServer() {
   registerLetterRoutes(server);
   registerAdminRoutes(server);
 
-  // Return unexpected content for common operating-system connectivity checks.
-  // This may prompt a captive-network window, but users can always browse to
-  // post.local or the AP address directly if their phone does not show one.
+  // Requests made to captive-check hostnames are redirected to the canonical
+  // local URL by handleHome. Requests already using post.local or the direct AP
+  // fallback receive the page without a redirect loop.
   server.on("/generate_204", HTTP_ANY, handleHome);          // Android
   server.on("/gen_204", HTTP_ANY, handleHome);               // Android
   server.on("/hotspot-detect.html", HTTP_ANY, handleHome);   // Apple

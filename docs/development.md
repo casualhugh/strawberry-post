@@ -13,7 +13,7 @@ python tools/dev_server.py
 Open http://127.0.0.1:8080/. The `/postie` preview uses `postie` /
 `change-me-postie`. Its seeded data and submissions live in memory and reset
 when the server stops. It does not model notice expiry, duplicate suppression,
-Wi-Fi, DNS, flash persistence, or display timing.
+Wi-Fi, DNS, SD/LittleFS persistence, or display timing.
 
 Edit the canonical assets in `web/`. The firmware build automatically generates
 `src/generated_web_assets.*`; do not edit those generated files directly.
@@ -47,8 +47,10 @@ Native tests require GCC/G++ on PATH. On Windows, use a MinGW-w64 toolchain
 such as MSYS2 UCRT64 and set `PYTHONUTF8=1` if needed. Native suites cover domain
 validation, expiry, tracking allocation, storage failure recovery and display
 layout/refresh decisions. Web tests cover asset freshness and mock HTTP flows;
-they do not execute the firmware HTTP handlers.
+they also cover degraded-storage capability fields and Postie/public messaging,
+but do not execute the firmware HTTP handlers.
 
-Before festival use, test actual power cuts, storage recovery, captive portals,
+Before festival use, test SD and LittleFS power cuts separately, unexpected SD
+removal, booting with and without a card, storage recovery, captive portals,
 1/2/4/8-phone traffic and display refresh responsiveness on the board.
 See [display verification](EPAPER_DISPLAY.md#hardware-verification-still-required).

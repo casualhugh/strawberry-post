@@ -1,7 +1,7 @@
 #ifndef _EPD_INIT_H_
 #define _EPD_INIT_H_
 
-#include "spi.h"
+#include "epd_spi.h"
 //由于5.97Inch E-Paper屏幕是有两颗SSD1683 IC控制
 //且SSD1683的分辨率为400x300 E-Paper的分辨率为 792x272
 //所以主从芯片使用分辨率为396x272将其级联在一起用于显示

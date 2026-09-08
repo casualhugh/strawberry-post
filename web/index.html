@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Notice Board | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="public-page">
   <main>
@@ -34,11 +34,13 @@
     <section id="posts" class="notice-board" aria-label="Current notices">
       <p class="hint">Checking the pigeon holes...</p>
     </section>
+    <button id="older-notices" type="button" hidden>Load older notices</button>
 
     <section class="post-form" aria-labelledby="post-heading">
       <p class="section-kicker">Add to the board</p>
       <h2 id="post-heading">Pin a notice</h2>
       <p>Pin something useful, weird or urgently needed. Public notices disappear after 48 hours.</p>
+      <p id="notice-service-warning" class="service-warning" role="status" hidden></p>
       <form id="notice-form">
         <label>Category
           <select name="category" required>
@@ -74,6 +76,9 @@
     const posts = document.querySelector('#posts');
     const form = document.querySelector('#notice-form');
     const result = document.querySelector('#result');
+    const olderNotices = document.querySelector('#older-notices');
+    const serviceWarning = document.querySelector('#notice-service-warning');
+    let nextNoticeBeforeId = 0;
     const text = (id, value) => { document.querySelector(id).textContent = value; };
     const grapevineJokes = [
       'fewer rumours and more readable handwriting',
@@ -91,21 +96,36 @@
       return node;
     }
 
-    async function loadNotices() {
-      const response = await fetch('/api/notices');
+    async function loadNotices(append = false) {
+      const query = append && nextNoticeBeforeId ? `?before=${nextNoticeBeforeId}` : '';
+      const response = await fetch(`/api/notices${query}`);
       const data = await response.json();
-      if (!data.notices.length) {
+      if (!append && !data.notices.length) {
         posts.replaceChildren(element('p', 'Nothing pinned yet. Either everyone is being very sensible, or they are still asleep.'));
-        return;
+      } else if (append) {
+        posts.append(...data.notices.map(notice => {
+          const article = document.createElement('article');
+          article.className = 'post';
+          article.dataset.category = notice.category;
+          article.append(element('strong', notice.category), element('p', notice.message));
+          return article;
+        }));
+      } else {
+        posts.replaceChildren(...data.notices.map(notice => {
+          const article = document.createElement('article');
+          article.className = 'post';
+          article.dataset.category = notice.category;
+          article.append(element('strong', notice.category), element('p', notice.message));
+          return article;
+        }));
       }
-      posts.replaceChildren(...data.notices.map(notice => {
-        const article = document.createElement('article');
-        article.className = 'post';
-        article.dataset.category = notice.category;
-        article.append(element('strong', notice.category), element('p', notice.message));
-        return article;
-      }));
+      nextNoticeBeforeId = data.nextBeforeId;
+      olderNotices.hidden = !nextNoticeBeforeId;
     }
+
+    olderNotices.onclick = () => loadNotices(true).catch(() => {
+      result.textContent = 'Could not load older notices.';
+    });
 
     async function loadStats() {
       const response = await fetch('/api/stats');
@@ -115,6 +135,14 @@
       text('#letters-waiting', stats.lettersWaiting);
       text('#letters-delivered', stats.lettersDelivered);
       text('#notices-active', stats.noticesActive);
+      const available = stats.noticePostingAvailable;
+      for (const control of form.elements) control.disabled = !available;
+      serviceWarning.hidden = available;
+      if (!available) {
+        serviceWarning.textContent = stats.storageInterrupted
+          ? 'The notice board has chucked a wobbly. You can still read what is already here, but nothing new can be pinned.'
+          : 'The notice board has gone on smoko. You can still send a letter while the Postie sorts it out.';
+      }
     }
 
     form.addEventListener('submit', async event => {
@@ -126,10 +154,16 @@
         body: new URLSearchParams(new FormData(form))
       });
       const data = await response.json();
-      result.textContent = response.ok ? 'Notice accepted. Someone will probably read that.' : data.error;
+      result.textContent = response.ok
+        ? 'Notice accepted. Someone will probably read that.'
+        : [503, 507].includes(response.status)
+          ? 'The notice board has chucked a wobbly. Your notice was not saved. Give the Postie a yell.'
+          : data.error;
       if (response.ok) {
         form.reset();
         await Promise.all([loadNotices(), loadStats()]);
+      } else if ([503, 507].includes(response.status)) {
+        await loadStats();
       }
     });
 

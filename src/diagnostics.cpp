@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "app_config.h"
+#include "device_time.h"
 #include "letters.h"
 #include "notices.h"
 #include "storage.h"
@@ -40,13 +41,17 @@ const char* methodName(HTTPMethod method) {
 void printSummary() {
   Serial.printf(
       "[health] clients=%u requests=%lu heap=%u minHeap=%u notices=%u "
-      "letters=%u storage=%u/%u\n",
+      "letters=%u noticeStore=%s/%s letterStore=%s/%s storage=%llu/%llu\n",
       static_cast<unsigned>(WiFi.softAPgetStationNum()),
       static_cast<unsigned long>(requestCount), ESP.getFreeHeap(),
       ESP.getMinFreeHeap(), static_cast<unsigned>(activeNoticeCount()),
       static_cast<unsigned>(letterCount()),
-      static_cast<unsigned>(storageUsedBytes()),
-      static_cast<unsigned>(storageTotalBytes()));
+      storageBackendName(recordStorageBackend(RecordStorage::Notices)),
+      recordStorageWritable(RecordStorage::Notices) ? "rw" : "ro",
+      storageBackendName(recordStorageBackend(RecordStorage::Letters)),
+      recordStorageWritable(RecordStorage::Letters) ? "rw" : "ro",
+      static_cast<unsigned long long>(storageUsedBytes()),
+      static_cast<unsigned long long>(storageTotalBytes()));
 }
 
 }  // namespace
@@ -103,8 +108,31 @@ void sendDiagnosticsJson(WebServer& server) {
   response += ESP.getMinFreeHeap();
   response += F(",\"largestFreeBlock\":");
   response += ESP.getMaxAllocHeap();
+  response += F(",\"deviceTimeSet\":");
+  response += deviceTimeIsSet() ? F("true") : F("false");
+  response += F(",\"deviceEpochSeconds\":");
+  response += static_cast<unsigned long long>(deviceEpochSeconds());
   response += F(",\"storageAvailable\":");
   response += storageAvailable() ? F("true") : F("false");
+  response += F(",\"noticeStorageBackend\":\"");
+  response += storageBackendName(recordStorageBackend(RecordStorage::Notices));
+  response += F("\",\"noticeStorageReadable\":");
+  response += recordStorageReadable(RecordStorage::Notices) ? F("true")
+                                                            : F("false");
+  response += F(",\"noticeStorageWritable\":");
+  response += recordStorageWritable(RecordStorage::Notices) ? F("true")
+                                                            : F("false");
+  response += F(",\"letterStorageBackend\":\"");
+  response += storageBackendName(recordStorageBackend(RecordStorage::Letters));
+  response += F("\",\"letterStorageReadable\":");
+  response += recordStorageReadable(RecordStorage::Letters) ? F("true")
+                                                            : F("false");
+  response += F(",\"letterStorageWritable\":");
+  response += recordStorageWritable(RecordStorage::Letters) ? F("true")
+                                                            : F("false");
+  response += F(",\"storageIssue\":\"");
+  response += storageIssueName(storageIssue());
+  response += '"';
   response += F(",\"storageUsedBytes\":");
   response += storageUsedBytes();
   response += F(",\"storageTotalBytes\":");

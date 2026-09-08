@@ -21,10 +21,12 @@ const IPAddress kSubnet(255, 255, 255, 0);
 
 constexpr uint16_t kHttpPort = 80;
 constexpr uint16_t kDnsPort = 53;
+constexpr uint32_t kDnsTtlSeconds = 1;
 
-constexpr uint32_t kPublicPostLifetimeMs = 48UL * 60UL * 60UL * 1000UL;
 constexpr size_t kNoticeCategoryMaxBytes = 32;
 constexpr size_t kNoticeMessageMaxBytes = 512;
+// Working-cache sizes, not persistent record limits. Older records are paged
+// from the selected storage backend.
 constexpr size_t kMaxNotices = 32;
 constexpr size_t kLetterRecipientMaxBytes = 160;
 constexpr size_t kLetterLocationMaxBytes = 96;
@@ -44,6 +46,10 @@ constexpr uint32_t kMainLoopYieldMs = 2;
 // E-paper values are intentionally centralized for hardware tuning. The busy
 // timeout prevents a disconnected or failed panel from blocking the website.
 constexpr uint32_t kEpaperRotationIntervalMs = 30000;
+// Show one Wi-Fi QR frame after this many notice frames. Set to 0 to disable
+// periodic QR frames; the QR still remains visible whenever there are no notices.
+constexpr uint8_t kEpaperNoticeSlotsPerWifiQr = 3;
 constexpr uint8_t kEpaperFullRefreshInterval = 10;
+constexpr uint32_t kButtonDebounceMs = 30;
 
 }  // namespace AppConfig

@@ -9,7 +9,7 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Notice Board | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="public-page">
   <main>
@@ -39,11 +39,13 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
     <section id="posts" class="notice-board" aria-label="Current notices">
       <p class="hint">Checking the pigeon holes...</p>
     </section>
+    <button id="older-notices" type="button" hidden>Load older notices</button>
 
     <section class="post-form" aria-labelledby="post-heading">
       <p class="section-kicker">Add to the board</p>
       <h2 id="post-heading">Pin a notice</h2>
       <p>Pin something useful, weird or urgently needed. Public notices disappear after 48 hours.</p>
+      <p id="notice-service-warning" class="service-warning" role="status" hidden></p>
       <form id="notice-form">
         <label>Category
           <select name="category" required>
@@ -79,6 +81,9 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
     const posts = document.querySelector('#posts');
     const form = document.querySelector('#notice-form');
     const result = document.querySelector('#result');
+    const olderNotices = document.querySelector('#older-notices');
+    const serviceWarning = document.querySelector('#notice-service-warning');
+    let nextNoticeBeforeId = 0;
     const text = (id, value) => { document.querySelector(id).textContent = value; };
     const grapevineJokes = [
       'fewer rumours and more readable handwriting',
@@ -96,21 +101,36 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       return node;
     }
 
-    async function loadNotices() {
-      const response = await fetch('/api/notices');
+    async function loadNotices(append = false) {
+      const query = append && nextNoticeBeforeId ? `?before=${nextNoticeBeforeId}` : '';
+      const response = await fetch(`/api/notices${query}`);
       const data = await response.json();
-      if (!data.notices.length) {
+      if (!append && !data.notices.length) {
         posts.replaceChildren(element('p', 'Nothing pinned yet. Either everyone is being very sensible, or they are still asleep.'));
-        return;
+      } else if (append) {
+        posts.append(...data.notices.map(notice => {
+          const article = document.createElement('article');
+          article.className = 'post';
+          article.dataset.category = notice.category;
+          article.append(element('strong', notice.category), element('p', notice.message));
+          return article;
+        }));
+      } else {
+        posts.replaceChildren(...data.notices.map(notice => {
+          const article = document.createElement('article');
+          article.className = 'post';
+          article.dataset.category = notice.category;
+          article.append(element('strong', notice.category), element('p', notice.message));
+          return article;
+        }));
       }
-      posts.replaceChildren(...data.notices.map(notice => {
-        const article = document.createElement('article');
-        article.className = 'post';
-        article.dataset.category = notice.category;
-        article.append(element('strong', notice.category), element('p', notice.message));
-        return article;
-      }));
+      nextNoticeBeforeId = data.nextBeforeId;
+      olderNotices.hidden = !nextNoticeBeforeId;
     }
+
+    olderNotices.onclick = () => loadNotices(true).catch(() => {
+      result.textContent = 'Could not load older notices.';
+    });
 
     async function loadStats() {
       const response = await fetch('/api/stats');
@@ -120,6 +140,14 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       text('#letters-waiting', stats.lettersWaiting);
       text('#letters-delivered', stats.lettersDelivered);
       text('#notices-active', stats.noticesActive);
+      const available = stats.noticePostingAvailable;
+      for (const control of form.elements) control.disabled = !available;
+      serviceWarning.hidden = available;
+      if (!available) {
+        serviceWarning.textContent = stats.storageInterrupted
+          ? 'The notice board has chucked a wobbly. You can still read what is already here, but nothing new can be pinned.'
+          : 'The notice board has gone on smoko. You can still send a letter while the Postie sorts it out.';
+      }
     }
 
     form.addEventListener('submit', async event => {
@@ -131,10 +159,16 @@ const char kHomePage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
         body: new URLSearchParams(new FormData(form))
       });
       const data = await response.json();
-      result.textContent = response.ok ? 'Notice accepted. Someone will probably read that.' : data.error;
+      result.textContent = response.ok
+        ? 'Notice accepted. Someone will probably read that.'
+        : [503, 507].includes(response.status)
+          ? 'The notice board has chucked a wobbly. Your notice was not saved. Give the Postie a yell.'
+          : data.error;
       if (response.ok) {
         form.reset();
         await Promise.all([loadNotices(), loadStats()]);
+      } else if ([503, 507].includes(response.status)) {
+        await loadStats();
       }
     });
 
@@ -152,7 +186,7 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Send a Letter | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="public-page letters-page">
   <main>
@@ -184,6 +218,7 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
         </div>
       </div>
       <p class="letter-explainer">Pick a type of stranger. Write them something fun. We&rsquo;ll try to find them.</p>
+      <p id="letter-service-warning" class="service-warning" role="status" hidden></p>
       <form id="send" class="postcard-form">
         <div class="postcard-address">
           <label>Who should the Postie look for?
@@ -208,6 +243,18 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <script>
     const send = document.querySelector('#send');
     const result = document.querySelector('#result');
+    const serviceWarning = document.querySelector('#letter-service-warning');
+
+    async function loadAvailability() {
+      const response = await fetch('/api/stats');
+      const stats = await response.json();
+      const available = stats.letterPostingAvailable;
+      for (const control of send.elements) control.disabled = !available;
+      serviceWarning.hidden = available;
+      if (!available) {
+        serviceWarning.textContent = 'The post bag\'s cactus. Nothing new can be sent right now. Give the Postie a yell.';
+      }
+    }
 
     send.addEventListener('submit', async event => {
       event.preventDefault();
@@ -218,14 +265,25 @@ const char kLettersPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       });
       const data = await response.json();
       result.hidden = false;
-      result.textContent = data.error || `Letter accepted. Now it is officially someone else's problem. Screenshot your tracking number: ${data.tracking}`;
+      result.textContent = response.ok
+        ? `Letter accepted. Now it is officially someone else's problem. Screenshot your tracking number: ${data.tracking}`
+        : [503, 507].includes(response.status)
+          ? 'The post bag\'s cactus. Your letter was not saved. Give the Postie a yell.'
+          : data.error;
       if (response.ok) {
         const link = document.createElement('a');
         link.href = `/track?tracking=${encodeURIComponent(data.tracking)}`;
         link.textContent = 'Track this letter';
         result.append(document.createElement('br'), link);
         send.reset();
+      } else if ([503, 507].includes(response.status)) {
+        await loadAvailability();
       }
+    });
+
+    loadAvailability().catch(() => {
+      serviceWarning.hidden = false;
+      serviceWarning.textContent = 'The sorting room is having a little lie-down. Try again shortly.';
     });
   </script>
 </body>
@@ -238,7 +296,7 @@ const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Track a Letter | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="public-page letters-page">
   <main>
@@ -262,6 +320,7 @@ const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       <p class="section-kicker">Tracking number</p>
       <h2 id="track-heading">Check with the sorting room</h2>
       <p class="hint">Enter the tracking number you received after sending your letter.</p>
+      <p id="tracking-service-warning" class="service-warning" role="status" hidden></p>
       <form id="track">
         <label>Tracking number
           <span class="tracking-number-input">
@@ -279,8 +338,23 @@ const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <script>
     const track = document.querySelector('#track');
     const status = document.querySelector('#status');
+    const serviceWarning = document.querySelector('#tracking-service-warning');
+    let historyComplete = true;
     const requested = new URLSearchParams(location.search).get('tracking');
     if (requested) track.elements.trackingDigits.value = requested.replace(/^STRAW-/i, '').replace(/[^0-9]/g, '').slice(0, 4);
+
+    async function loadAvailability() {
+      const response = await fetch('/api/stats');
+      const stats = await response.json();
+      historyComplete = stats.letterHistoryComplete;
+      serviceWarning.hidden = historyComplete;
+      if (!historyComplete) {
+        serviceWarning.textContent = 'The filing cabinet is having a moment. We can only check the letters already on the desk. Ask the Postie if yours has gone bush.';
+      }
+      if (!stats.letterLookupAvailable) {
+        for (const control of track.elements) control.disabled = true;
+      }
+    }
 
     track.addEventListener('submit', async event => {
       event.preventDefault();
@@ -289,10 +363,13 @@ const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       const response = await fetch(`/api/letters/status?tracking=${encodeURIComponent(number)}`);
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 404) await loadAvailability().catch(() => {});
         if (response.status === 400) {
           status.textContent = 'That number has gone walkabout. Check the digits and try again.';
-        } else if (response.status === 404) {
+        } else if (response.status === 404 && historyComplete) {
           status.textContent = 'We could not find that letter. It may be hiding near the lost thongs.';
+        } else if (response.status === 404) {
+          status.textContent = 'The filing cabinet is having a moment. We can only check the letters already on the desk. Ask the Postie if yours has gone bush.';
         } else {
           status.textContent = data.error || 'The sorting room is having a little lie-down. Try again shortly.';
         }
@@ -307,6 +384,8 @@ const char kTrackingPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       };
       status.textContent = data.error || `${data.tracking}: ${labels[data.status] || data.status}`;
     });
+
+    loadAvailability().catch(() => {});
   </script>
 </body>
 </html>
@@ -318,21 +397,34 @@ const char kAdminPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Postie | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="admin">
   <main>
     <h1>Postie&rsquo;s Sorting Room</h1>
     <p>This page and its APIs require Postie authentication.</p>
+    <p id="storage-status" class="system-status">Checking storage status...</p>
+    <button id="set-time" type="button">Set device clock from this browser</button>
+    <p id="clock-status">Checking device clock...</p>
     <p><a href="/postie/diagnostics">System diagnostics</a></p>
     <h2>Letters</h2>
     <section id="letters"></section>
+    <button id="older-letters" type="button" hidden>Load older letters</button>
     <h2>Notice moderation</h2>
     <section id="notices"></section>
+    <button id="older-notices" type="button" hidden>Load older notices</button>
     <p id="result" role="status"></p>
   </main>
   <script>
     const result = document.querySelector('#result');
+    const clockStatus = document.querySelector('#clock-status');
+    const storageStatus = document.querySelector('#storage-status');
+    const olderLetters = document.querySelector('#older-letters');
+    const olderNotices = document.querySelector('#older-notices');
+    let nextLetterBeforeId = 0;
+    let nextNoticeBeforeId = 0;
+    let letterActionsAvailable = false;
+    let noticeActionsAvailable = false;
     function element(tag, text, className) {
       const node = document.createElement(tag);
       if (text !== undefined) node.textContent = text;
@@ -348,7 +440,7 @@ const char kAdminPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       });
       const body = await response.json();
       result.textContent = body.error || 'Saved.';
-      if (response.ok) await load();
+      if (response.ok || [503, 507].includes(response.status)) await load();
     }
 
     function actionButton(label, callback, className) {
@@ -357,48 +449,106 @@ const char kAdminPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
       return button;
     }
 
-    async function load() {
-      const response = await fetch('/api/admin/overview');
+    function storageMessage(data) {
+      if (data.storageIssue === 'sd-failure') {
+        return 'SD card failed after startup. Notice and letter storage are read-only. Only cached records are available. Nothing new can be saved or changed. Power off the device, check the SD card, then restart.';
+      }
+      if (data.noticeStorageBackend === 'none' && data.letterStorageBackend === 'littlefs') {
+        if (!data.letterStorageWritable) {
+          return 'No SD card was detected at startup. Notice storage is unavailable. Internal flash storage has failed and letter storage is read-only. Power off the device and service the storage before restarting.';
+        }
+        return 'No SD card was detected at startup. Notice storage is unavailable. Letters are being saved to internal flash. Power off before installing an SD card, then restart.';
+      }
+      if (data.noticeStorageBackend === 'none' && data.letterStorageBackend === 'none') {
+        return 'No SD card was detected and internal flash storage is unavailable. Notices and letters cannot be saved.';
+      }
+      if (data.storageIssue === 'littlefs-failure') {
+        return 'Internal flash storage failed. Letter storage is read-only until the device is restarted.';
+      }
+      return `Storage active. Notices: ${data.noticeStorageBackend}, ${data.noticeStorageWritable ? 'writable' : 'read-only'}. Letters: ${data.letterStorageBackend}, ${data.letterStorageWritable ? 'writable' : 'read-only'}.`;
+    }
+
+    function letterCard(letter) {
+      const card = element('details', undefined, 'card');
+      if (letter.status === 'Waiting') card.open = true;
+      card.append(element('summary', `${letter.tracking} | ${letter.recipient} | ${letter.status}`));
+      const details = element('dl', undefined, 'private');
+      [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
+        .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
+      card.append(details);
+      ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
+        card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
+      card.append(actionButton('Delete', () => post('/api/admin/letters/delete', {id: letter.id}), 'alt'));
+      card.querySelectorAll('button').forEach(button => { button.disabled = !letterActionsAvailable; });
+      return card;
+    }
+
+    function noticeCard(notice) {
+      const card = element('article', undefined, 'card');
+      card.append(
+        element('strong', notice.category),
+        element('p', notice.message),
+        actionButton(notice.hidden ? 'Unhide' : 'Hide', () => post('/api/admin/notices/moderate', {
+          id: notice.id,
+          action: notice.hidden ? 'unhide' : 'hide'
+        }), 'alt'),
+        actionButton('Delete', () => post('/api/admin/notices/moderate', {id: notice.id, action: 'delete'}))
+      );
+      card.querySelectorAll('button').forEach(button => { button.disabled = !noticeActionsAvailable; });
+      return card;
+    }
+
+    async function fetchOverview(letterBefore = 0, noticeBefore = 0) {
+      const query = new URLSearchParams({letterBefore, noticeBefore});
+      const response = await fetch(`/api/admin/overview?${query}`);
       if (!response.ok) {
         result.textContent = 'Authentication failed.';
-        return;
+        throw new Error('overview failed');
       }
-      const data = await response.json();
+      return response.json();
+    }
+
+    async function load() {
+      const data = await fetchOverview();
+      letterActionsAvailable = data.letterStorageWritable;
+      noticeActionsAvailable = data.noticeStorageWritable;
+      storageStatus.textContent = storageMessage(data);
 
       const letters = document.querySelector('#letters');
       if (!data.letters.length) {
         letters.replaceChildren(element('p', 'No letters waiting. Either everyone is organised, or nobody has found the post office.'));
       } else {
-        letters.replaceChildren(...data.letters.map(letter => {
-        const card = element('details', undefined, 'card');
-        if (letter.status === 'Waiting') card.open = true;
-        card.append(element('summary', `${letter.tracking} | ${letter.recipient} | ${letter.status}`));
-        const details = element('dl', undefined, 'private');
-        [['Likely location', letter.location], ['Message', letter.message], ['Sender', letter.sender || 'Anonymous']]
-          .forEach(([label, value]) => details.append(element('dt', label), element('dd', value)));
-        card.append(details);
-        ['Written', 'OutForDelivery', 'Delivered', 'CouldNotFind'].forEach(status =>
-          card.append(actionButton(status, () => post('/api/admin/letters/status', {id: letter.id, status}))));
-        card.append(actionButton('Delete', () => post('/api/admin/letters/delete', {id: letter.id}), 'alt'));
-        return card;
-        }));
+        letters.replaceChildren(...data.letters.map(letterCard));
       }
 
       const notices = document.querySelector('#notices');
-      notices.replaceChildren(...data.notices.map(notice => {
-        const card = element('article', undefined, 'card');
-        card.append(
-          element('strong', notice.category),
-          element('p', notice.message),
-          actionButton(notice.hidden ? 'Unhide' : 'Hide', () => post('/api/admin/notices/moderate', {
-            id: notice.id,
-            action: notice.hidden ? 'unhide' : 'hide'
-          }), 'alt'),
-          actionButton('Delete', () => post('/api/admin/notices/moderate', {id: notice.id, action: 'delete'}))
-        );
-        return card;
-      }));
+      notices.replaceChildren(...data.notices.map(noticeCard));
+      nextLetterBeforeId = data.nextLetterBeforeId;
+      nextNoticeBeforeId = data.nextNoticeBeforeId;
+      olderLetters.hidden = !nextLetterBeforeId;
+      olderNotices.hidden = !nextNoticeBeforeId;
+      clockStatus.textContent = data.deviceTimeSet
+        ? `Device clock set: ${new Date(data.deviceEpochSeconds * 1000).toLocaleString()}`
+        : 'Device clock is not set. Pending records currently use boot-relative time.';
     }
+
+    olderLetters.onclick = async () => {
+      const data = await fetchOverview(nextLetterBeforeId, 1);
+      document.querySelector('#letters').append(...data.letters.map(letterCard));
+      nextLetterBeforeId = data.nextLetterBeforeId;
+      olderLetters.hidden = !nextLetterBeforeId;
+    };
+
+    olderNotices.onclick = async () => {
+      const data = await fetchOverview(1, nextNoticeBeforeId);
+      document.querySelector('#notices').append(...data.notices.map(noticeCard));
+      nextNoticeBeforeId = data.nextNoticeBeforeId;
+      olderNotices.hidden = !nextNoticeBeforeId;
+    };
+
+    document.querySelector('#set-time').onclick = () => post('/api/admin/time', {
+      epochSeconds: Math.floor(Date.now() / 1000)
+    });
 
     load().catch(() => { result.textContent = 'Could not load the sorting room.'; });
   </script>
@@ -412,7 +562,7 @@ const char kDiagnosticsPage[] PROGMEM = R"STRAWBERRY_ASSET(<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Diagnostics | Strawberry Post</title>
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
 </head>
 <body class="admin">
   <main>
@@ -565,6 +715,34 @@ button:active {
   transform: translate(3px, 3px);
   box-shadow: 1px 1px 0 var(--red-dark);
 }
+
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+button:disabled:active {
+  transform: none;
+  box-shadow: 4px 4px 0 var(--red-dark);
+}
+
+.service-warning, .system-status {
+  margin: 1rem 0;
+  padding: .85rem 1rem;
+  border: 2px solid var(--red-dark);
+  border-radius: .25rem;
+  background: #fff1cf;
+  color: var(--red-dark);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.system-status {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: .92rem;
+}
+
+.service-warning[hidden] { display: none; }
 
 .status, .ticket {
   padding: 1rem;

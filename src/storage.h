@@ -1,17 +1,37 @@
 #pragma once
 
+#include <Arduino.h>
 #include <stddef.h>
 #include <stdint.h>
 
-using StorageFileValidator = bool (*)(const void* data, size_t size,
-                                      void* context);
+enum class RecordStorage : uint8_t { Notices, Letters };
+enum class StorageBackend : uint8_t { None, LittleFs, SdCard };
+enum class StorageLoadResult : uint8_t { Missing, Loaded, Invalid };
+enum class StorageIssue : uint8_t { None, SdFailure, LittleFsFailure };
+
+using StorageJsonReader = bool (*)(Stream& input, void* context);
+using StorageJsonWriter = bool (*)(Print& output, void* context);
+using StorageFileVisitor = bool (*)(const char* path, void* context);
 
 bool startStorage();
 bool storageAvailable();
-bool readStorageFileValidated(const char* path, void* destination, size_t size,
-                              StorageFileValidator validator,
-                              void* validatorContext = nullptr);
-bool writeStorageFileAtomic(const char* path, const void* data, size_t size);
+StorageBackend recordStorageBackend(RecordStorage storage);
+const char* storageBackendName(StorageBackend backend);
+bool recordStorageReadable(RecordStorage storage);
+bool recordStorageWritable(RecordStorage storage);
+StorageIssue storageIssue();
+const char* storageIssueName(StorageIssue issue);
+StorageLoadResult readStorageJsonValidated(
+    RecordStorage storage, const char* path, size_t maximumBytes,
+    StorageJsonReader reader, void* readerContext = nullptr);
+bool writeStorageJsonAtomic(RecordStorage storage, const char* path,
+                            StorageJsonWriter writer,
+                            void* writerContext = nullptr);
+bool visitStorageFiles(RecordStorage storage, const char* directory,
+                       StorageFileVisitor visitor,
+                       void* visitorContext = nullptr);
+bool removeStorageFile(RecordStorage storage, const char* path);
+bool storageFileExists(RecordStorage storage, const char* path);
 uint32_t persistedBootCount();
-size_t storageUsedBytes();
-size_t storageTotalBytes();
+uint64_t storageUsedBytes();
+uint64_t storageTotalBytes();

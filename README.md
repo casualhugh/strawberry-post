@@ -1,5 +1,7 @@
 # Strawberry Post
 
+[![CI](https://github.com/casualhugh/strawberry-post/actions/workflows/ci.yml/badge.svg)](https://github.com/casualhugh/strawberry-post/actions/workflows/ci.yml)
+
 An offline festival notice board and letter service hosted by an ESP32-S3
 CrowPanel. Phones connect to its Wi-Fi network; no internet or router is needed.
 
